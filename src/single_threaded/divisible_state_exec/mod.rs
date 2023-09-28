@@ -6,9 +6,9 @@ use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_core::smr::exec::ReplyNode;
-use atlas_execution::{ExecutionRequest, ExecutorHandle};
-use atlas_execution::app::{Application, BatchReplies, Reply, Request};
-use atlas_execution::state::divisible_state::{AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage};
+use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
+use atlas_smr_application::app::{Application, BatchReplies, Reply, Request};
+use atlas_smr_application::state::divisible_state::{AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage};
 use atlas_metrics::metrics::metric_duration;
 use crate::ExecutorReplier;
 
