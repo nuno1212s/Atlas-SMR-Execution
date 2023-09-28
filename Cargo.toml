@@ -1,5 +1,5 @@
 [package]
-name = "atlas-smr-exec"
+name = "atlas-smr-execution"
 version = "0.1.0"
 description = "The Atlas SMR execution layer. Responsible for receiving decisions from the ordering protocol and executing them on the application defined by the developer"
 edition = "2021"
@@ -8,11 +8,11 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.19"
-atlas-communication = { path = "../atlas-communication" }
-atlas-core = { path = "../atlas-core" }
-atlas-smr-application = { path = "../atlas-smr-application" }
-atlas-metrics = { path = "../atlas-metrics" }
-atlas-common = { path = "../atlas-common" }
+atlas-communication = { path = "../Atlas-Communication" }
+atlas-core = { path = "../Atlas-Core" }
+atlas-smr-application = { path = "../Atlas-SMR-Application" }
+atlas-metrics = { path = "../Atlas-Metrics" }
+atlas-common = { path = "../Atlas-Common" }
 # We use this threadpool instead of rayon since we need to be able to share the
 # immutable reference to the state across threads without having to use Arc or 'static
 # Reference lifetimes
