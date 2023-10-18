@@ -163,7 +163,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
         for chunk in diff.chunks(PARTS_PER_DELIVERY) {
             let parts = self.state.get_parts(chunk).expect("Failed to get necessary parts");
 
-            self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::StatePart(MaybeVec::Vec(parts)))).unwrap();
+            self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::StatePart(MaybeVec::Mult(parts)))).unwrap();
         }
 
         self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::Done)).expect("Failed to send checkpoint");
