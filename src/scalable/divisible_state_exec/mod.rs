@@ -110,9 +110,19 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                             }
                         }
                         ExecutionRequest::CatchUp(requests) => {
-                            for req in requests {
-                                self.application.update(&mut self.state, req);
+
+                            for batch in requests.into_iter() {
+                                let seq_no = batch.sequence_number();
+
+                                let start = Instant::now();
+
+                                let reply_batch = scalable_execution(&mut self.thread_pool, &self.application, &mut self.state, batch);
+
+                                metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
+
+                                self.execution_finished::<T>(Some(seq_no), reply_batch);
                             }
+
                         }
                         ExecutionRequest::Update((batch, instant)) => {
                             let seq_no = batch.sequence_number();

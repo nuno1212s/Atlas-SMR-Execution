@@ -97,9 +97,19 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
                             }
                         }
                         ExecutionRequest::CatchUp(requests) => {
-                            for req in requests {
-                                executor.application.update(&mut executor.state, req);
+
+                            for batch in requests.into_iter() {
+                                let seq_no = batch.sequence_number();
+
+                                let start = Instant::now();
+
+                                let reply_batch = executor.application.update_batch(&mut executor.state, batch);
+
+                                metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
+
+                                executor.execution_finished::<T>(Some(seq_no), reply_batch);
                             }
+
                         }
                         ExecutionRequest::Update((batch, instant)) => {
                             let seq_no = batch.sequence_number();
