@@ -38,7 +38,8 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
           A: ScalableApp<S> + 'static + Send,
           NT: 'static {
     pub fn init_handle() -> (ExecutorHandle<AppData<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER);
+        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
+        Some("Scalable Mon Exec Work Channel"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -57,9 +58,11 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
             (<A as Application<S>>::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER,
+        Some("Scalable Mon Install State Channel"));
 
-        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER,
+        Some("Scalable Mon App State Message"));
 
         let mut executor = ScalableMonolithicExecutor {
             application: service,

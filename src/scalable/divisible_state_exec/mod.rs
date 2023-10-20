@@ -45,7 +45,8 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
     where S: DivisibleState + CRUDState + 'static + Send + Sync,
           A: ScalableApp<S> + 'static + Send {
     pub fn init_handle() -> (ExecutorHandle<AppData<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER);
+        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
+                                                 Some("Scalable Work Handle"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -64,9 +65,11 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
             (<A as Application<S>>::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER,
+                                                             Some("Install State Work Handle"));
 
-        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER,
+                                                                       Some("App State Checkpoint Work Handle"));
 
         let descriptor = state.get_descriptor().clone();
 
@@ -110,7 +113,6 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                             }
                         }
                         ExecutionRequest::CatchUp(requests) => {
-
                             for batch in requests.into_iter() {
                                 let seq_no = batch.sequence_number();
 
@@ -122,7 +124,6 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
 
                                 self.execution_finished::<T>(Some(seq_no), reply_batch);
                             }
-
                         }
                         ExecutionRequest::Update((batch, instant)) => {
                             let seq_no = batch.sequence_number();

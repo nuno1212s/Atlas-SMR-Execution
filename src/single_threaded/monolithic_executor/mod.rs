@@ -35,7 +35,8 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
           A: Application<S> + 'static + Send,
           NT: 'static {
     pub fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER);
+        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
+                                                 Some("ST Monolithic Executor Work Channel"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -54,9 +55,11 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
             (A::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER,
+                                                             Some("ST Monolithic Executor Work InstState"));
 
-        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER,
+                                                                       Some("ST Monolithic Executor AppState"));
 
         let mut executor = MonolithicExecutor {
             application: service,
