@@ -41,7 +41,8 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
     where S: DivisibleState + 'static + Send,
           A: Application<S> + 'static + Send {
     pub fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER);
+        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
+        Some("Divisible State ST Exec Work"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -60,9 +61,11 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
             (A::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER,
+        Some("Divisible state ST InsState"));
 
-        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER);
+        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER,
+        Some("Divisible State ST AppState"));
 
         let descriptor = state.get_descriptor().clone();
 

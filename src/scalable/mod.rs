@@ -181,7 +181,7 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
 
     let mut replies = BatchReplies::with_capacity(batch.len());
 
-    let (tx, rx) = channel::new_bounded_sync(batch.len());
+    let (tx, rx) = channel::new_bounded_sync(batch.len(), None);
 
     let mut updates = batch.into_inner();
 
@@ -249,7 +249,7 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
 fn scalable_unordered_execution<A, S>(thread_pool: &mut Pool, application: &A, state: &S, batch: UnorderedBatch<Request<A, S>>) -> BatchReplies<Reply<A, S>>
     where A: Application<S> + Sync, S: Send + Sync  {
     let mut replies = BatchReplies::with_capacity(batch.len());
-    let (tx, rx) = channel::new_bounded_sync(batch.len());
+    let (tx, rx) = channel::new_bounded_sync(batch.len(), None);
 
     thread_pool.scoped(|scope| {
         batch.into_inner().into_iter().enumerate().for_each(|(pos, request)| {
