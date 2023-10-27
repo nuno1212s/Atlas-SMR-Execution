@@ -105,10 +105,11 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                             // Receive all state updates that are available
                             while let Ok(state_recvd) = self.state_rx.recv() {
                                 match state_recvd {
+                                    InstallStateMessage::StateDescriptor(descriptor) => {}
                                     InstallStateMessage::StatePart(state_part) => {
                                         self.state.accept_parts(state_part.into_vec()).expect("Failed to install state parts into executor");
                                     }
-                                    InstallStateMessage::Done => break
+                                    InstallStateMessage::Done => break,
                                 }
                             }
                         }

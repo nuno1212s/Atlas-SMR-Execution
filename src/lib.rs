@@ -39,6 +39,8 @@ pub trait TDivisibleStateExecutor<A, S, NT>
     fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>);
 
     /// Initialization method for the executor
+    /// Should return a channel for the state messages to be sent to the executor
+    /// As well as a channel to receive checkpoints from the application
     fn init(work_receiver: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
             initial_state: Option<(S, Vec<Request<A, S>>)>,
             service: A,
@@ -59,6 +61,8 @@ pub trait TMonolithicStateExecutor<A, S, NT>
     fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>);
 
     /// Initialization method for the executor
+    /// Should return a channel for the state messages to be sent to the executor
+    /// As well as a channel to receive checkpoints from the application
     fn init(work_receiver: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
             initial_state: Option<(S, Vec<Request<A, S>>)>,
             service: A,
