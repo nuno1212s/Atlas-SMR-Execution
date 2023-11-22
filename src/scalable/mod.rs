@@ -207,7 +207,7 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
 
                 let reply = application.speculatively_execute(&mut exec_unit, request.operation().clone());
 
-                tx.send((pos, exec_unit.complete(), UpdateReply::init(request.from(), request.session_id(), request.operation_id(), reply))).unwrap();
+                tx.send_return((pos, exec_unit.complete(), UpdateReply::init(request.from(), request.session_id(), request.operation_id(), reply))).unwrap();
             });
         });
 
@@ -258,7 +258,7 @@ fn scalable_unordered_execution<A, S>(thread_pool: &mut Pool, application: &A, s
 
                 let reply = speculatively_execute_unordered::<A, S>(application, state, op);
 
-                tx.clone().send(UpdateReply::init(from, session, op_id, reply)).unwrap();
+                tx.clone().send_return(UpdateReply::init(from, session, op_id, reply)).unwrap();
             });
         });
 

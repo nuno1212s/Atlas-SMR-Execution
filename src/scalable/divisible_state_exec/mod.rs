@@ -178,15 +178,15 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
 
         let diff = self.last_checkpoint_descriptor.compare_descriptors(&current_state);
 
-        self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::StateDescriptor(current_state))).unwrap();
+        self.checkpoint_tx.send_return(AppStateMessage::new(seq, AppState::StateDescriptor(current_state))).unwrap();
 
         for chunk in diff.chunks(PARTS_PER_DELIVERY) {
             let parts = self.state.get_parts(chunk).expect("Failed to get necessary parts");
 
-            self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::StatePart(MaybeVec::Mult(parts)))).unwrap();
+            self.checkpoint_tx.send_return(AppStateMessage::new(seq, AppState::StatePart(MaybeVec::Mult(parts)))).unwrap();
         }
 
-        self.checkpoint_tx.send(AppStateMessage::new(seq, AppState::Done)).expect("Failed to send checkpoint");
+        self.checkpoint_tx.send_return(AppStateMessage::new(seq, AppState::Done)).expect("Failed to send checkpoint");
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)

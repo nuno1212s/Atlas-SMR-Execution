@@ -156,7 +156,7 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
     fn deliver_checkpoint_state(&self, seq: SeqNo) {
         let cloned_state = self.state.clone();
 
-        self.checkpoint_tx.send(AppStateMessage::new(seq, cloned_state)).expect("Failed to send checkpoint");
+        self.checkpoint_tx.send_return(AppStateMessage::new(seq, cloned_state)).expect("Failed to send checkpoint");
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
