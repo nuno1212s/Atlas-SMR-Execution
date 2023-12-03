@@ -6,12 +6,12 @@ use atlas_common::threadpool;
 use atlas_common::error::*;
 use atlas_core::messages::ReplyMessage;
 use atlas_core::smr::exec::{ReplyNode, ReplyType};
-use atlas_execution::app::{Application, BatchReplies, Request};
-use atlas_execution::{ExecutionRequest, ExecutorHandle};
-use atlas_execution::serialize::ApplicationData;
-use atlas_execution::state as state;
-use atlas_execution::state::divisible_state::{DivisibleState};
-use atlas_execution::state::monolithic_state::{AppStateMessage, InstallStateMessage, MonolithicState};
+use atlas_smr_application::app::{Application, BatchReplies, Request};
+use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
+use atlas_smr_application::serialize::ApplicationData;
+use atlas_smr_application::state as state;
+use atlas_smr_application::state::divisible_state::{DivisibleState};
+use atlas_smr_application::state::monolithic_state::{AppStateMessage, InstallStateMessage, MonolithicState};
 use atlas_metrics::metrics::metric_duration;
 use crate::metric::REPLIES_SENT_TIME_ID;
 use crate::scalable::{CRUDState, ScalableApp};
@@ -39,6 +39,8 @@ pub trait TDivisibleStateExecutor<A, S, NT>
     fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>);
 
     /// Initialization method for the executor
+    /// Should return a channel for the state messages to be sent to the executor
+    /// As well as a channel to receive checkpoints from the application
     fn init(work_receiver: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
             initial_state: Option<(S, Vec<Request<A, S>>)>,
             service: A,
@@ -59,6 +61,8 @@ pub trait TMonolithicStateExecutor<A, S, NT>
     fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>);
 
     /// Initialization method for the executor
+    /// Should return a channel for the state messages to be sent to the executor
+    /// As well as a channel to receive checkpoints from the application
     fn init(work_receiver: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
             initial_state: Option<(S, Vec<Request<A, S>>)>,
             service: A,
