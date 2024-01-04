@@ -34,7 +34,7 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
     where S: MonolithicState + 'static,
           A: Application<S> + 'static + Send,
           NT: 'static {
-    pub fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
+    pub fn init_handle() -> (ExecutorHandle<Request<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
         let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
                                                  Some("ST Monolithic Executor Work Channel"));
 
@@ -48,7 +48,7 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
         send_node: Arc<NT>)
         -> Result<(ChannelSyncTx<InstallStateMessage<S>>, ChannelSyncRx<AppStateMessage<S>>)>
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<A::AppData> {
+              NT: ReplyNode<Reply<A, S>> {
         let (state, requests) = if let Some(state) = initial_state {
             state
         } else {
@@ -160,7 +160,7 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where NT: ReplyNode<A::AppData> + 'static,
+        where NT: ReplyNode<Reply<A, S>> + 'static,
               T: ExecutorReplier + 'static {
         let send_node = self.send_node.clone();
 

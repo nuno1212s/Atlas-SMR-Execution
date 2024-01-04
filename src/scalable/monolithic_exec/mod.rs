@@ -37,7 +37,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     where S: MonolithicState + CRUDState + 'static + Send + Sync,
           A: ScalableApp<S> + 'static + Send,
           NT: 'static {
-    pub fn init_handle() -> (ExecutorHandle<AppData<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
+    pub fn init_handle() -> (ExecutorHandle<Request<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
         let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
         Some("Scalable Mon Exec Work Channel"));
 
@@ -51,7 +51,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
         send_node: Arc<NT>)
         -> Result<(ChannelSyncTx<InstallStateMessage<S>>, ChannelSyncRx<AppStateMessage<S>>)>
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<AppData<A, S>> + 'static {
+              NT: ReplyNode<Reply<A, S>> + 'static {
         let (state, requests) = if let Some(state) = initial_state {
             state
         } else {
