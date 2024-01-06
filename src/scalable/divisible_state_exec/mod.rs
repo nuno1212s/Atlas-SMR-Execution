@@ -9,14 +9,14 @@ use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_core::smr::exec::ReplyNode;
+use atlas_metrics::metrics::metric_duration;
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request};
 use atlas_smr_application::state::divisible_state::{AppState, AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage};
-use atlas_metrics::metrics::metric_duration;
 
 use crate::ExecutorReplier;
 use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
-use crate::scalable::{CRUDState, ExecutionUnit, scalable_execution, scalable_unordered_execution, ScalableApp, THREAD_POOL_THREADS};
+use crate::scalable::{CRUDState, scalable_execution, scalable_unordered_execution, ScalableApp, THREAD_POOL_THREADS};
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
@@ -58,7 +58,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
         send_node: Arc<NT>)
         -> Result<(ChannelSyncTx<InstallStateMessage<S>>, ChannelSyncRx<AppStateMessage<S>>)>
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<AppData<A, S>> + 'static {
+              NT: ReplyNode<Reply<A, S>> + 'static {
         let (state, requests) = if let Some(state) = initial_state {
             state
         } else {

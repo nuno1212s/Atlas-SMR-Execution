@@ -85,7 +85,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
 
     fn run<T>(mut self)
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<AppData<A, S>> + 'static {
+              NT: ReplyNode<Reply<A, S>> + 'static {
         std::thread::Builder::new()
             .name(format!("Executor Manager Thread"))
             .spawn(move || {
@@ -165,7 +165,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where NT: ReplyNode<AppData<A, S>> + 'static,
+        where NT: ReplyNode<Reply<A, S>> + 'static,
               T: ExecutorReplier + 'static {
         let send_node = self.send_node.clone();
 

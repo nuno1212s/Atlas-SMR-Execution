@@ -128,7 +128,7 @@ impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for MultiThreadedMonExecutor
     where A: ScalableApp<S> + 'static,
           S: MonolithicState + CRUDState + Send + Sync + 'static,
           NT: 'static {
-    fn init_handle() -> (ExecutorHandle<A::AppData>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
+    fn init_handle() -> (ExecutorHandle<Request<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
         scalable::monolithic_exec::ScalableMonolithicExecutor::<S, A, NT>::init_handle()
     }
 
