@@ -6,12 +6,12 @@ use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
 use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_core::smr::exec::ReplyNode;
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_application::app::{Application, BatchReplies, Reply, Request};
 use atlas_smr_application::state::divisible_state::{AppState, AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage};
 use atlas_metrics::metrics::metric_duration;
 use atlas_smr_application::serialize::ApplicationData;
+use atlas_smr_core::exec::ReplyNode;
 use crate::ExecutorReplier;
 
 use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
