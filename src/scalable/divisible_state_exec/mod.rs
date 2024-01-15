@@ -13,6 +13,7 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request};
 use atlas_smr_application::state::divisible_state::{AppState, AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage};
 use atlas_smr_core::exec::ReplyNode;
+use atlas_smr_core::SMRReply;
 
 use crate::ExecutorReplier;
 use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
@@ -58,7 +59,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
         send_node: Arc<NT>)
         -> Result<(ChannelSyncTx<InstallStateMessage<S>>, ChannelSyncRx<AppStateMessage<S>>)>
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<Reply<A, S>> + 'static {
+              NT: ReplyNode<SMRReply<A::AppData>> + 'static {
         let (state, requests) = if let Some(state) = initial_state {
             state
         } else {
@@ -95,7 +96,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
 
     fn run<T>(mut self)
         where T: ExecutorReplier + 'static,
-              NT: ReplyNode<Reply<A, S>> + 'static {
+              NT: ReplyNode<SMRReply<A::AppData>> + 'static {
         std::thread::Builder::new()
             .name(format!("Executor thread"))
             .spawn(move || {
@@ -190,7 +191,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where NT: ReplyNode<Reply<A, S>> + 'static,
+        where NT: ReplyNode<SMRReply<A::AppData>> + 'static,
               T: ExecutorReplier + 'static {
         let send_node = self.send_node.clone();
 
