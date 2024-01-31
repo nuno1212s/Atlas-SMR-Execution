@@ -12,7 +12,7 @@ use atlas_smr_application::state as state;
 use atlas_smr_application::state::divisible_state::{DivisibleState};
 use atlas_smr_application::state::monolithic_state::{AppStateMessage, InstallStateMessage, MonolithicState};
 use atlas_metrics::metrics::metric_duration;
-use atlas_smr_core::exec::{ReplyNode, ReplyType};
+use atlas_smr_core::exec::{ReplyNode, RequestType};
 use atlas_smr_core::SMRReply;
 use crate::metric::REPLIES_SENT_TIME_ID;
 use crate::scalable::{CRUDState, ScalableApp};
@@ -208,7 +208,7 @@ impl ExecutorReplier for ReplicaReplier {
                 // but for now this will do
                 if let Some((message, last_peer_id)) = curr_send.take() {
                     let flush = peer_id != last_peer_id;
-                    send_node.send(ReplyType::Ordered, message, last_peer_id, flush);
+                    send_node.send(RequestType::Ordered, message, last_peer_id, flush);
                 }
 
                 // store previous reply message and peer id,
@@ -221,7 +221,7 @@ impl ExecutorReplier for ReplicaReplier {
 
             // deliver last reply
             if let Some((message, last_peer_id)) = curr_send {
-                send_node.send(ReplyType::Ordered, message, last_peer_id, true);
+                send_node.send(RequestType::Ordered, message, last_peer_id, true);
             } else {
                 // slightly optimize code path;
                 // the previous if branch will always execute
