@@ -208,7 +208,7 @@ impl ExecutorReplier for ReplicaReplier {
                 // but for now this will do
                 if let Some((message, last_peer_id)) = curr_send.take() {
                     let flush = peer_id != last_peer_id;
-                    send_node.send(RequestType::Ordered, message, last_peer_id, flush);
+                    send_node.send_signed(RequestType::Ordered, message, last_peer_id, flush);
                 }
 
                 // store previous reply message and peer id,
@@ -221,7 +221,7 @@ impl ExecutorReplier for ReplicaReplier {
 
             // deliver last reply
             if let Some((message, last_peer_id)) = curr_send {
-                send_node.send(RequestType::Ordered, message, last_peer_id, true);
+                send_node.send_signed(RequestType::Ordered, message, last_peer_id, true);
             } else {
                 // slightly optimize code path;
                 // the previous if branch will always execute
