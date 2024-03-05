@@ -7,12 +7,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
-thiserror = "1.0.50"
+anyhow = "1.0"
+thiserror = "1.0"
 log = "0.4.19"
 atlas-communication = { path = "../Atlas-Communication" }
 atlas-core = { path = "../Atlas-Core" }
 atlas-smr-application = { path = "../Atlas-SMR-Application" }
+atlas-smr-core = { path = "../Atlas-SMR-Core" }
 atlas-metrics = { path = "../Atlas-Metrics" }
 atlas-common = { path = "../Atlas-Common" }
 # We use this threadpool instead of rayon since we need to be able to share the
