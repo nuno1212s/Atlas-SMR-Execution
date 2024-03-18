@@ -347,7 +347,9 @@ where
                     //TODO: If this repeats various write accesses to the same key,
                     // Reduce them all into a single access
                     unit.cache.get(&alteration.column).map(|value| {
-                        if let Some(value) = value.get(&alteration.key) { state.update(&alteration.column, &alteration.key, value); }
+                        if let Some(value) = value.get(&alteration.key) {
+                            state.update(&alteration.column, &alteration.key, value);
+                        }
                     });
                 }
                 AccessType::Delete => {

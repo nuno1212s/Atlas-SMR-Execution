@@ -1,7 +1,6 @@
 use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
 use crate::scalable::{
-    scalable_execution, scalable_unordered_execution, CRUDState, ScalableApp,
-    THREAD_POOL_THREADS,
+    scalable_execution, scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
 };
 use crate::ExecutorReplier;
 use atlas_common::channel;
