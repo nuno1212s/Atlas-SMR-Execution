@@ -65,7 +65,7 @@ where
     pub fn init<T>(
         handle: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
         initial_state: Option<(S, Vec<Request<A, S>>)>,
-        mut service: A,
+        service: A,
         send_node: Arc<NT>,
     ) -> Result<(
         ChannelSyncTx<InstallStateMessage<S>>,
@@ -115,7 +115,7 @@ where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         std::thread::Builder::new()
-            .name(format!("Executor thread"))
+            .name("Executor thread".to_string())
             .spawn(move || {
                 while let Ok(exec_req) = self.work_rx.recv() {
                     match exec_req {
@@ -123,7 +123,7 @@ where
                             // Receive all state updates that are available
                             while let Ok(state_recvd) = self.state_rx.recv() {
                                 match state_recvd {
-                                    InstallStateMessage::StateDescriptor(descriptor) => {}
+                                    InstallStateMessage::StateDescriptor(_descriptor) => {}
                                     InstallStateMessage::StatePart(state_part) => {
                                         self.state
                                             .accept_parts(state_part.into_vec())

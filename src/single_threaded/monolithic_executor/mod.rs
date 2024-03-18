@@ -55,7 +55,7 @@ where
     pub fn init<T>(
         handle: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
         initial_state: Option<(S, Vec<Request<A, S>>)>,
-        mut service: A,
+        service: A,
         send_node: Arc<NT>,
     ) -> Result<(
         ChannelSyncTx<InstallStateMessage<S>>,
@@ -91,7 +91,7 @@ where
         }
 
         std::thread::Builder::new()
-            .name(format!("Executor thread"))
+            .name("Executor thread".to_string())
             .spawn(move || {
                 while let Ok(exec_req) = executor.work_rx.recv() {
                     match exec_req {

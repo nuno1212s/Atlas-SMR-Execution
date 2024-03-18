@@ -1,6 +1,6 @@
 use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
 use crate::scalable::{
-    scalable_execution, scalable_unordered_execution, CRUDState, ExecutionUnit, ScalableApp,
+    scalable_execution, scalable_unordered_execution, CRUDState, ScalableApp,
     THREAD_POOL_THREADS,
 };
 use crate::ExecutorReplier;
@@ -60,7 +60,7 @@ where
     pub fn init<T>(
         handle: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
         initial_state: Option<(S, Vec<Request<A, S>>)>,
-        mut service: A,
+        service: A,
         send_node: Arc<NT>,
     ) -> Result<(
         ChannelSyncTx<InstallStateMessage<S>>,
@@ -107,7 +107,7 @@ where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         std::thread::Builder::new()
-            .name(format!("Executor Manager Thread"))
+            .name("Executor Manager Thread".to_string())
             .spawn(move || {
                 while let Ok(exec_req) = self.work_rx.recv() {
                     match exec_req {

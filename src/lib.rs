@@ -6,7 +6,7 @@ use atlas_common::ordering::SeqNo;
 use atlas_common::threadpool;
 use atlas_core::messages::ReplyMessage;
 use atlas_metrics::metrics::metric_duration;
-use atlas_smr_application::app::{Application, BatchReplies, Reply, Request};
+use atlas_smr_application::app::{Application, BatchReplies, Request};
 use atlas_smr_application::serialize::ApplicationData;
 use atlas_smr_application::state;
 use atlas_smr_application::state::divisible_state::DivisibleState;
@@ -241,7 +241,7 @@ impl ExecutorReplier for FollowerReplier {
         D: ApplicationData + 'static,
         NT: ReplyNode<SMRReply<D>> + 'static,
     {
-        if let None = seq {
+        if seq.is_none() {
             //Followers only deliver replies to the unordered requests, since it's not part of the quorum
             // And the requests it executes are only forwarded to it
 
@@ -254,7 +254,7 @@ pub struct ReplicaReplier;
 
 impl ExecutorReplier for ReplicaReplier {
     fn execution_finished<D, NT>(
-        mut send_node: Arc<NT>,
+        send_node: Arc<NT>,
         _seq: Option<SeqNo>,
         batch: BatchReplies<D::Reply>,
     ) where

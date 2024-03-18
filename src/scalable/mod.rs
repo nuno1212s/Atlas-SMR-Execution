@@ -3,12 +3,12 @@ pub mod monolithic_exec;
 
 use atlas_common::channel;
 use atlas_common::collections::HashMap;
-use atlas_common::globals::ReadOnly;
+
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
 };
-use atlas_smr_application::serialize::ApplicationData;
+
 use scoped_threadpool::Pool;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -216,7 +216,7 @@ where
 
     let (tx, rx) = channel::new_bounded_sync(batch.len(), None::<String>);
 
-    let mut updates = batch.into_inner();
+    let updates = batch.into_inner();
 
     let collision_state = thread_pool.scoped(|scope| {
         let mut collision_state = CollisionState {
@@ -282,7 +282,7 @@ where
 
     let mut to_apply = Vec::with_capacity(execution_results.len());
 
-    for (pos, (exec_unit, reply)) in execution_results {
+    for (_pos, (exec_unit, reply)) in execution_results {
         to_apply.push(exec_unit);
 
         replies.push(reply);
@@ -312,7 +312,7 @@ where
             .into_inner()
             .into_iter()
             .enumerate()
-            .for_each(|(pos, request)| {
+            .for_each(|(_pos, request)| {
                 scope.execute(|| {
                     let (from, session, op_id, op) = request.into_inner();
 
@@ -347,9 +347,7 @@ where
                     //TODO: If this repeats various write accesses to the same key,
                     // Reduce them all into a single access
                     unit.cache.get(&alteration.column).map(|value| {
-                        value.get(&alteration.key).map(|value| {
-                            state.update(&alteration.column, &alteration.key, value);
-                        });
+                        if let Some(value) = value.get(&alteration.key) { state.update(&alteration.column, &alteration.key, value); }
                     });
                 }
                 AccessType::Delete => {
