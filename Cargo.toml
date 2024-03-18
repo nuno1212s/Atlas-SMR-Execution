@@ -20,3 +20,5 @@ atlas-common = { path = "../Atlas-Common" }
 # immutable reference to the state across threads without having to use Arc or 'static
 # Reference lifetimes
 scoped_threadpool = "0.1.9"
+rayon = "1.9.0"
+itertools = "0.12.1"

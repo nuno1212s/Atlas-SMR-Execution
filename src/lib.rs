@@ -1,3 +1,5 @@
+#![feature(specialization)]
+
 use crate::metric::REPLIES_SENT_TIME_ID;
 use crate::scalable::{CRUDState, ScalableApp};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
@@ -18,6 +20,7 @@ use atlas_smr_core::exec::{ReplyNode, RequestType};
 use atlas_smr_core::SMRReply;
 use std::sync::Arc;
 use std::time::Instant;
+
 
 pub mod metric;
 pub mod scalable;
