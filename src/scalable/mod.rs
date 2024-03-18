@@ -1,15 +1,17 @@
 pub mod divisible_state_exec;
 pub mod monolithic_exec;
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use scoped_threadpool::Pool;
 use atlas_common::channel;
 use atlas_common::collections::HashMap;
 use atlas_common::globals::ReadOnly;
 use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_smr_application::app::{Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply};
+use atlas_smr_application::app::{
+    Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
+};
 use atlas_smr_application::serialize::ApplicationData;
+use scoped_threadpool::Pool;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How many threads should we use in the execution threadpool
 const THREAD_POOL_THREADS: u32 = 4;
@@ -46,13 +48,20 @@ pub trait CRUDState: Send {
 }
 
 /// A trait defining the methods required for an application to be scalable
-pub trait ScalableApp<S>: Application<S> + Sync where S: CRUDState {
+pub trait ScalableApp<S>: Application<S> + Sync
+where
+    S: CRUDState,
+{
     /// This execution method takes a dynamic reference to the state. This is because
     /// We will pass it an ExecutionUnit which is not S, so it must handle any state that
     /// implements CRUDState.
     /// This operation must yield the same result as the ordered execution of the same request
     /// for this to correctly function.
-    fn speculatively_execute(&self, state: &mut impl CRUDState, request: Request<Self, S>) -> Reply<Self, S>;
+    fn speculatively_execute(
+        &self,
+        state: &mut impl CRUDState,
+        request: Request<Self, S>,
+    ) -> Reply<Self, S>;
 }
 
 /// A data structure that represents a single execution unit
@@ -60,7 +69,10 @@ pub trait ScalableApp<S>: Application<S> + Sync where S: CRUDState {
 /// This can be interpreted as a state since it implements CRUDState.
 /// All changes made here are done in a local cache and are only applied to
 /// the state once it is verified to be free of collisions from other operations.
-pub struct ExecutionUnit<'a, S> where S: CRUDState {
+pub struct ExecutionUnit<'a, S>
+where
+    S: CRUDState,
+{
     /// The sequence number of the batch this operation belongs to
     seq_no: SeqNo,
     /// The position of this request within the general batch
@@ -92,9 +104,14 @@ unsafe impl<'a, S> Sync for ExecutionUnit<'a, S> where S: CRUDState {}
 
 unsafe impl<'a, S> Send for ExecutionUnit<'a, S> where S: CRUDState {}
 
-impl<'a, S> CRUDState for ExecutionUnit<'a, S> where S: CRUDState {
+impl<'a, S> CRUDState for ExecutionUnit<'a, S>
+where
+    S: CRUDState,
+{
     fn create(&mut self, column: &str, key: &[u8], value: &[u8]) -> bool {
-        self.alterations.borrow_mut().push(Access::init(column, key.to_vec(), AccessType::Write));
+        self.alterations
+            .borrow_mut()
+            .push(Access::init(column, key.to_vec(), AccessType::Write));
 
         if self.cache.contains_key(column) {
             let column = self.cache.get_mut(column).unwrap();
@@ -117,7 +134,9 @@ impl<'a, S> CRUDState for ExecutionUnit<'a, S> where S: CRUDState {
     }
 
     fn read(&self, column: &str, key: &[u8]) -> Option<Vec<u8>> {
-        self.alterations.borrow_mut().push(Access::init(column, key.to_vec(), AccessType::Read));
+        self.alterations
+            .borrow_mut()
+            .push(Access::init(column, key.to_vec(), AccessType::Read));
 
         if self.cache.contains_key(column) {
             let column = self.cache.get(column).unwrap();
@@ -129,7 +148,9 @@ impl<'a, S> CRUDState for ExecutionUnit<'a, S> where S: CRUDState {
     }
 
     fn update(&mut self, column: &str, key: &[u8], value: &[u8]) -> Option<Vec<u8>> {
-        self.alterations.borrow_mut().push(Access::init(column, key.to_vec(), AccessType::Write));
+        self.alterations
+            .borrow_mut()
+            .push(Access::init(column, key.to_vec(), AccessType::Write));
 
         if self.cache.contains_key(column) {
             let column = self.cache.get_mut(column).unwrap();
@@ -147,7 +168,9 @@ impl<'a, S> CRUDState for ExecutionUnit<'a, S> where S: CRUDState {
     }
 
     fn delete(&mut self, column: &str, key: &[u8]) -> Option<Vec<u8>> {
-        self.alterations.borrow_mut().push(Access::init(column, key.to_vec(), AccessType::Delete));
+        self.alterations
+            .borrow_mut()
+            .push(Access::init(column, key.to_vec(), AccessType::Delete));
 
         if self.cache.contains_key(column) {
             let column = self.cache.get_mut(column).unwrap();
@@ -159,7 +182,10 @@ impl<'a, S> CRUDState for ExecutionUnit<'a, S> where S: CRUDState {
     }
 }
 
-impl<'a, S> ExecutionUnit<'a, S> where S: CRUDState {
+impl<'a, S> ExecutionUnit<'a, S>
+where
+    S: CRUDState,
+{
     ///
     pub fn complete(self) -> ExecutionResult {
         ExecutionResult {
@@ -172,9 +198,16 @@ impl<'a, S> ExecutionUnit<'a, S> where S: CRUDState {
 }
 
 /// Execute the given batch in a scalable manner, utilizing a thread pool, performing collision analysis
-fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: &mut S, batch: UpdateBatch<Request<A, S>>) -> BatchReplies<Reply<A, S>>
-    where A: ScalableApp<S>,
-          S: CRUDState + Sync + 'a {
+fn scalable_execution<'a, A, S>(
+    thread_pool: &mut Pool,
+    application: &A,
+    state: &mut S,
+    batch: UpdateBatch<Request<A, S>>,
+) -> BatchReplies<Reply<A, S>>
+where
+    A: ScalableApp<S>,
+    S: CRUDState + Sync + 'a,
+{
     let seq_no = batch.sequence_number();
 
     let mut execution_results = BTreeMap::new();
@@ -205,9 +238,20 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
                     state_reference: state,
                 };
 
-                let reply = application.speculatively_execute(&mut exec_unit, request.operation().clone());
+                let reply =
+                    application.speculatively_execute(&mut exec_unit, request.operation().clone());
 
-                tx.send_return((pos, exec_unit.complete(), UpdateReply::init(request.from(), request.session_id(), request.operation_id(), reply))).unwrap();
+                tx.send_return((
+                    pos,
+                    exec_unit.complete(),
+                    UpdateReply::init(
+                        request.from(),
+                        request.session_id(),
+                        request.operation_id(),
+                        reply,
+                    ),
+                ))
+                .unwrap();
             });
         });
 
@@ -221,7 +265,6 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
     });
 
     for collision in collision_state.collisions {
-
         // Discard of the results since we have they have collided
         execution_results.remove(&collision);
 
@@ -229,7 +272,12 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
 
         let app_reply = application.update(state, update.operation().clone());
 
-        replies.add(update.from(), update.session_id(), update.operation_id(), app_reply);
+        replies.add(
+            update.from(),
+            update.session_id(),
+            update.operation_id(),
+            app_reply,
+        );
     }
 
     let mut to_apply = Vec::with_capacity(execution_results.len());
@@ -246,21 +294,35 @@ fn scalable_execution<'a, A, S>(thread_pool: &mut Pool, application: &A, state: 
 }
 
 /// Unordered execution scales better than ordered execution and does not require collision verification
-fn scalable_unordered_execution<A, S>(thread_pool: &mut Pool, application: &A, state: &S, batch: UnorderedBatch<Request<A, S>>) -> BatchReplies<Reply<A, S>>
-    where A: Application<S> + Sync, S: Send + Sync  {
+fn scalable_unordered_execution<A, S>(
+    thread_pool: &mut Pool,
+    application: &A,
+    state: &S,
+    batch: UnorderedBatch<Request<A, S>>,
+) -> BatchReplies<Reply<A, S>>
+where
+    A: Application<S> + Sync,
+    S: Send + Sync,
+{
     let mut replies = BatchReplies::with_capacity(batch.len());
     let (tx, rx) = channel::new_bounded_sync(batch.len(), None::<String>);
 
     thread_pool.scoped(|scope| {
-        batch.into_inner().into_iter().enumerate().for_each(|(pos, request)| {
-            scope.execute(|| {
-                let (from, session, op_id, op) = request.into_inner();
+        batch
+            .into_inner()
+            .into_iter()
+            .enumerate()
+            .for_each(|(pos, request)| {
+                scope.execute(|| {
+                    let (from, session, op_id, op) = request.into_inner();
 
-                let reply = speculatively_execute_unordered::<A, S>(application, state, op);
+                    let reply = speculatively_execute_unordered::<A, S>(application, state, op);
 
-                tx.clone().send_return(UpdateReply::init(from, session, op_id, reply)).unwrap();
+                    tx.clone()
+                        .send_return(UpdateReply::init(from, session, op_id, reply))
+                        .unwrap();
+                });
             });
-        });
 
         while let Ok(reply) = rx.recv() {
             replies.push(reply);
@@ -271,7 +333,10 @@ fn scalable_unordered_execution<A, S>(thread_pool: &mut Pool, application: &A, s
 }
 
 /// Apply the given results of execution to the state
-fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult>) where S: CRUDState {
+fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult>)
+where
+    S: CRUDState,
+{
     for unit in execution_units {
         unit.alterations.iter().for_each(|alteration| {
             match alteration.access_type {
@@ -279,7 +344,6 @@ fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult
                     // Ignore read accesses as they do not affect the state
                 }
                 AccessType::Write => {
-
                     //TODO: If this repeats various write accesses to the same key,
                     // Reduce them all into a single access
                     unit.cache.get(&alteration.column).map(|value| {
@@ -297,11 +361,16 @@ fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult
 }
 
 /// Speculatively execute an unordered operation
-fn speculatively_execute_unordered<A, S>(application: &A, state: &S, request: Request<A, S>) -> Reply<A, S>
-    where A: Application<S> {
+fn speculatively_execute_unordered<A, S>(
+    application: &A,
+    state: &S,
+    request: Request<A, S>,
+) -> Reply<A, S>
+where
+    A: Application<S>,
+{
     application.unordered_execution(state, request)
 }
-
 
 pub struct Collisions {
     /// The indexes within the batch of the operations
@@ -342,7 +411,9 @@ fn progress_collision_state(state: &mut CollisionState, unit: &ExecutionResult) 
             accessors.insert(unit.position_in_batch);
             accesses.insert(access.access_type);
 
-            state.accessed.insert(access.key.clone(), (accesses, accessors));
+            state
+                .accessed
+                .insert(access.key.clone(), (accesses, accessors));
         }
     });
 
@@ -352,8 +423,11 @@ fn progress_collision_state(state: &mut CollisionState, unit: &ExecutionResult) 
 /// Calculate collisions of data accesses within a batch, returns all
 /// of the operations that must be executed sequentially
 fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Collisions>
-    where S: CRUDState {
-    let mut accessed: HashMap<String, HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>> = Default::default();
+where
+    S: CRUDState,
+{
+    let mut accessed: HashMap<String, HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>> =
+        Default::default();
 
     let mut collisions = BTreeSet::new();
 
@@ -374,12 +448,19 @@ fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Col
                     operation_seq.push(unit.position_in_batch);
                     accesses.push(access.access_type);
                 } else {
-                    accesses.insert(access.key.clone(), (vec![access.access_type], vec![unit.position_in_batch]));
+                    accesses.insert(
+                        access.key.clone(),
+                        (vec![access.access_type], vec![unit.position_in_batch]),
+                    );
                 }
             } else {
-                let mut accesses: HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)> = Default::default();
+                let mut accesses: HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)> =
+                    Default::default();
 
-                accesses.insert(access.key.clone(), (vec![access.access_type], vec![unit.position_in_batch]));
+                accesses.insert(
+                    access.key.clone(),
+                    (vec![access.access_type], vec![unit.position_in_batch]),
+                );
 
                 accessed.insert(access.column.clone(), accesses);
             }
@@ -412,7 +493,7 @@ impl AccessType {
             (AccessType::Write, _) | (_, AccessType::Write) => true,
             // Delete - Anything is also a collision
             (AccessType::Delete, _) | (_, AccessType::Delete) => true,
-            (_, _) => false
+            (_, _) => false,
         }
     }
 }

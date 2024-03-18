@@ -1,27 +1,34 @@
-use std::sync::Arc;
-use std::time::Instant;
-use log::info;
-use scoped_threadpool::Pool;
+use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
+use crate::scalable::{
+    scalable_execution, scalable_unordered_execution, CRUDState, ExecutionUnit, ScalableApp,
+    THREAD_POOL_THREADS,
+};
+use crate::ExecutorReplier;
 use atlas_common::channel;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request};
-use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
-use atlas_smr_application::state::monolithic_state::{AppStateMessage, InstallStateMessage, MonolithicState};
 use atlas_metrics::metrics::metric_duration;
+use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request};
+use atlas_smr_application::state::monolithic_state::{
+    AppStateMessage, InstallStateMessage, MonolithicState,
+};
+use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
-use crate::ExecutorReplier;
-use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID};
-use crate::scalable::{CRUDState, ExecutionUnit, scalable_execution, scalable_unordered_execution, ScalableApp, THREAD_POOL_THREADS};
+use log::info;
+use scoped_threadpool::Pool;
+use std::sync::Arc;
+use std::time::Instant;
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
 
 pub struct ScalableMonolithicExecutor<S, A, NT>
-    where S: MonolithicState + 'static + Send + Sync,
-          A: Application<S> + 'static {
+where
+    S: MonolithicState + 'static + Send + Sync,
+    A: Application<S> + 'static,
+{
     application: A,
     state: S,
 
@@ -35,12 +42,17 @@ pub struct ScalableMonolithicExecutor<S, A, NT>
 }
 
 impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
-    where S: MonolithicState + CRUDState + 'static + Send + Sync,
-          A: ScalableApp<S> + 'static + Send,
-          NT: 'static {
-    pub fn init_handle() -> (ExecutorHandle<Request<A, S>>, ChannelSyncRx<ExecutionRequest<Request<A, S>>>) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER,
-        Some("Scalable Mon Exec Work Channel"));
+where
+    S: MonolithicState + CRUDState + 'static + Send + Sync,
+    A: ScalableApp<S> + 'static + Send,
+    NT: 'static,
+{
+    pub fn init_handle() -> (
+        ExecutorHandle<Request<A, S>>,
+        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
+    ) {
+        let (tx, rx) =
+            channel::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Mon Exec Work Channel"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -49,21 +61,26 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
         handle: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         mut service: A,
-        send_node: Arc<NT>)
-        -> Result<(ChannelSyncTx<InstallStateMessage<S>>, ChannelSyncRx<AppStateMessage<S>>)>
-        where T: ExecutorReplier + 'static,
-              NT: ReplyNode<SMRReply<A::AppData>> + 'static {
+        send_node: Arc<NT>,
+    ) -> Result<(
+        ChannelSyncTx<InstallStateMessage<S>>,
+        ChannelSyncRx<AppStateMessage<S>>,
+    )>
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    {
         let (state, requests) = if let Some(state) = initial_state {
             state
         } else {
             (<A as Application<S>>::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) = channel::new_bounded_sync(STATE_BUFFER,
-        Some("Scalable Mon Install State Channel"));
+        let (state_tx, state_rx) =
+            channel::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon Install State Channel"));
 
-        let (checkpoint_tx, checkpoint_rx) = channel::new_bounded_sync(STATE_BUFFER,
-        Some("Scalable Mon App State Message"));
+        let (checkpoint_tx, checkpoint_rx) =
+            channel::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon App State Message"));
 
         let mut executor = ScalableMonolithicExecutor {
             application: service,
@@ -85,8 +102,10 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     }
 
     fn run<T>(mut self)
-        where T: ExecutorReplier + 'static,
-              NT: ReplyNode<SMRReply<A::AppData>> + 'static {
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    {
         std::thread::Builder::new()
             .name(format!("Executor Manager Thread"))
             .spawn(move || {
@@ -105,7 +124,12 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
 
                                 let start = Instant::now();
 
-                                let reply_batch = scalable_execution(&mut self.thread_pool, &self.application, &mut self.state, batch);
+                                let reply_batch = scalable_execution(
+                                    &mut self.thread_pool,
+                                    &self.application,
+                                    &mut self.state,
+                                    batch,
+                                );
 
                                 metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
 
@@ -119,7 +143,12 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
 
                             let start = Instant::now();
 
-                            let reply_batch = scalable_execution(&mut self.thread_pool, &self.application, &mut self.state, batch);
+                            let reply_batch = scalable_execution(
+                                &mut self.thread_pool,
+                                &self.application,
+                                &mut self.state,
+                                batch,
+                            );
 
                             metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
 
@@ -133,7 +162,12 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
 
                             let start = Instant::now();
 
-                            let reply_batch = scalable_execution(&mut self.thread_pool, &self.application, &mut self.state, batch);
+                            let reply_batch = scalable_execution(
+                                &mut self.thread_pool,
+                                &self.application,
+                                &mut self.state,
+                                batch,
+                            );
 
                             metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
 
@@ -147,27 +181,36 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
                             todo!()
                         }
                         ExecutionRequest::ExecuteUnordered(batch) => {
-                            let reply = scalable_unordered_execution(&mut self.thread_pool, &self.application, &mut self.state, batch);
+                            let reply = scalable_unordered_execution(
+                                &mut self.thread_pool,
+                                &self.application,
+                                &mut self.state,
+                                batch,
+                            );
 
                             self.execution_finished::<T>(None, reply);
                         }
                     }
                 }
-            }).expect("Failed to start executor thread");
+            })
+            .expect("Failed to start executor thread");
     }
-
 
     ///Clones the current state and delivers it to the application
     /// Takes a sequence number, which corresponds to the last executed consensus instance before we performed the checkpoint
     fn deliver_checkpoint_state(&self, seq: SeqNo) {
         let cloned_state = self.state.clone();
 
-        self.checkpoint_tx.send_return(AppStateMessage::new(seq, cloned_state)).expect("Failed to send checkpoint");
+        self.checkpoint_tx
+            .send_return(AppStateMessage::new(seq, cloned_state))
+            .expect("Failed to send checkpoint");
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where NT: ReplyNode<SMRReply<A::AppData>> + 'static,
-              T: ExecutorReplier + 'static {
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+        T: ExecutorReplier + 'static,
+    {
         let send_node = self.send_node.clone();
 
         /*{
