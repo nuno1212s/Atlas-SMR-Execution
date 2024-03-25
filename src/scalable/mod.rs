@@ -1,19 +1,22 @@
-pub mod divisible_state_exec;
-pub mod monolithic_exec;
+#![allow(dead_code)]
+
+use std::collections::BTreeMap;
+
+use itertools::Itertools;
+use rayon::prelude::*;
+use rayon::ThreadPool;
 
 use atlas_common::channel;
-use atlas_common::collections::HashMap;
-
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
 };
 
-use scoped_threadpool::Pool;
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, RwLock};
-use itertools::Itertools;
+use crate::scalable::execution_unit::{CollisionState, ExecutionResult, ExecutionUnit, progress_collision_state};
+
+pub mod divisible_state_exec;
+pub mod monolithic_exec;
+mod execution_unit;
 
 /// How many threads should we use in the execution threadpool
 const THREAD_POOL_THREADS: u32 = 4;
@@ -66,142 +69,9 @@ pub trait ScalableApp<S>: Application<S> + Sync
     ) -> Reply<Self, S>;
 }
 
-/// A data structure that represents a single execution unit
-/// Which can be speculatively parallelized.
-/// This can be interpreted as a state since it implements CRUDState.
-/// All changes made here are done in a local cache and are only applied to
-/// the state once it is verified to be free of collisions from other operations.
-pub struct ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
-{
-    /// The sequence number of the batch this operation belongs to
-    seq_no: SeqNo,
-    /// The position of this request within the general batch
-    position_in_batch: usize,
-    /// The data accesses this request wants to perform
-    alterations: RefCell<Vec<Access>>,
-    /// A cache containing all of the overwritten values by this operation,
-    /// So we don't read stale values from the state.
-    cache: HashMap<String, HashMap<Vec<u8>, Vec<u8>>>,
-    /// State reference a reference to the state
-    state_reference: &'a S,
-}
-
-/// Result of the execution of an execution unit
-pub struct ExecutionResult {
-    /// The sequence number of the batch this operation belongs to
-    seq_no: SeqNo,
-    /// The position of this request within the general batch
-    position_in_batch: usize,
-    /// The data accesses this request wants to perform
-    alterations: Vec<Access>,
-    /// A cache containing all of the overwritten values by this operation,
-    cache: HashMap<String, HashMap<Vec<u8>, Vec<u8>>>,
-}
-
-/// We can safely do this since the execution units
-/// are only used within a single thread and are not shared between threads
-unsafe impl<'a, S> Sync for ExecutionUnit<'a, S> where S: CRUDState {}
-
-unsafe impl<'a, S> Send for ExecutionUnit<'a, S> where S: CRUDState {}
-
-impl<'a, S> CRUDState for ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
-{
-    fn create(&mut self, column: &str, key: &[u8], value: &[u8]) -> bool {
-        self.alterations
-            .borrow_mut()
-            .push(Access::init(column, key.to_vec(), AccessType::Write));
-
-        if self.cache.contains_key(column) {
-            let column = self.cache.get_mut(column).unwrap();
-
-            if column.contains_key(key) {
-                false
-            } else {
-                column.insert(key.to_vec(), value.to_vec());
-                true
-            }
-        } else {
-            let mut column_map = HashMap::default();
-
-            column_map.insert(key.to_vec(), value.to_vec());
-
-            self.cache.insert(column.to_string(), column_map);
-
-            true
-        }
-    }
-
-    fn read(&self, column: &str, key: &[u8]) -> Option<Vec<u8>> {
-        self.alterations
-            .borrow_mut()
-            .push(Access::init(column, key.to_vec(), AccessType::Read));
-
-        if self.cache.contains_key(column) {
-            let column = self.cache.get(column).unwrap();
-
-            column.get(key).cloned()
-        } else {
-            self.state_reference.read(column, key)
-        }
-    }
-
-    fn update(&mut self, column: &str, key: &[u8], value: &[u8]) -> Option<Vec<u8>> {
-        self.alterations
-            .borrow_mut()
-            .push(Access::init(column, key.to_vec(), AccessType::Write));
-
-        if self.cache.contains_key(column) {
-            let column = self.cache.get_mut(column).unwrap();
-
-            column.insert(key.to_vec(), value.to_vec())
-        } else {
-            let mut column_map = HashMap::default();
-
-            column_map.insert(key.to_vec(), value.to_vec());
-
-            self.cache.insert(column.to_string(), column_map);
-
-            None
-        }
-    }
-
-    fn delete(&mut self, column: &str, key: &[u8]) -> Option<Vec<u8>> {
-        self.alterations
-            .borrow_mut()
-            .push(Access::init(column, key.to_vec(), AccessType::Delete));
-
-        if self.cache.contains_key(column) {
-            let column = self.cache.get_mut(column).unwrap();
-
-            column.remove(key)
-        } else {
-            None
-        }
-    }
-}
-
-impl<'a, S> ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
-{
-    ///
-    pub fn complete(self) -> ExecutionResult {
-        ExecutionResult {
-            seq_no: self.seq_no,
-            position_in_batch: self.position_in_batch,
-            alterations: self.alterations.into_inner(),
-            cache: self.cache,
-        }
-    }
-}
-
 /// Execute the given batch in a scalable manner, utilizing a thread pool, performing collision analysis
 fn scalable_execution<'a, A, S>(
-    thread_pool: &mut Pool,
+    thread_pool: &mut ThreadPool,
     application: &A,
     state: &mut S,
     batch: UpdateBatch<Request<A, S>>,
@@ -218,60 +88,75 @@ fn scalable_execution<'a, A, S>(
 
     let (tx, rx) = channel::new_bounded_sync(batch.len(), None::<String>);
 
-    let updates = batch.into_inner();
+    let updates = batch
+        .into_inner()
+        .into_iter()
+        .enumerate()
+        .collect::<Vec<_>>();
 
-    let collision_state = thread_pool.scoped(|scope| {
-        let mut collision_state = CollisionState {
-            accessed: Default::default(),
-            collisions: Default::default(),
-        };
+    let chunk_size = updates.len() / (thread_pool.current_num_threads());
 
-        updates.iter().enumerate().for_each(|(pos, request)| {
-            let request = request.clone();
-            let tx = tx.clone();
+    let mut collision_state = CollisionState::default();
+
+    thread_pool.scope(|scope| {
+        // Start the workers that will process all the updates.
+        // These updates are kept mostly in order
+        for chunk in 0..updates.chunks(chunk_size).count() {
+            
             let state = &*state;
+            let tx = tx.clone();
+            let updates = &updates;
+            
+            scope.spawn(move |_scope| {
+                updates
+                    .chunks(chunk_size)
+                    .nth(chunk)
+                    .unwrap()
+                    .iter()
+                    .for_each(|(pos, request)| {
+                        let request = request.clone();
 
-            scope.execute(move || {
-                let mut exec_unit = ExecutionUnit {
-                    seq_no,
-                    position_in_batch: pos,
-                    alterations: Default::default(),
-                    cache: Default::default(),
-                    state_reference: state,
-                };
+                        let mut exec_unit = ExecutionUnit {
+                            seq_no,
+                            position_in_batch: *pos,
+                            accesses: Default::default(),
+                            cache: Default::default(),
+                            state_reference: state,
+                        };
 
-                let reply =
-                    application.speculatively_execute(&mut exec_unit, request.operation().clone());
+                        let reply =
+                            application.speculatively_execute(&mut exec_unit, request.operation().clone());
 
-                tx.send_return((
-                    pos,
-                    exec_unit.complete(),
-                    UpdateReply::init(
-                        request.from(),
-                        request.session_id(),
-                        request.operation_id(),
-                        reply,
-                    ),
-                ))
-                    .unwrap();
+                        tx.send_return((
+                            *pos,
+                            exec_unit.complete(),
+                            UpdateReply::init(
+                                request.from(),
+                                request.session_id(),
+                                request.operation_id(),
+                                reply,
+                            ),
+                        ))
+                            .unwrap();
+                    });
             });
-        });
+        }
 
         while let Ok((pos, exec_unit, reply)) = rx.recv() {
             progress_collision_state(&mut collision_state, &exec_unit);
 
             execution_results.insert(pos, (exec_unit, reply));
         }
-
-        collision_state
     });
 
     for collision in collision_state.collisions {
         // Discard of the results since we have they have collided
         execution_results.remove(&collision);
 
-        let update = &updates[collision];
+        let (_, update) = &updates[collision];
 
+        // Re execute them in the correct ordering.
+        // This is guaranteed because the collisions is an ordered set
         let app_reply = application.update(state, update.operation().clone());
 
         replies.add(
@@ -297,7 +182,7 @@ fn scalable_execution<'a, A, S>(
 
 /// Unordered execution scales better than ordered execution and does not require collision verification
 pub(super) fn scalable_unordered_execution<A, S>(
-    thread_pool: &mut Pool,
+    thread_pool: &mut ThreadPool,
     application: &A,
     state: &S,
     batch: UnorderedBatch<Request<A, S>>,
@@ -306,42 +191,20 @@ pub(super) fn scalable_unordered_execution<A, S>(
         A: Application<S>,
         S: Send + Sync,
 {
-    let mut replies = BatchReplies::with_capacity(batch.len());
-    let (tx, rx) = channel::new_bounded_sync(batch.len(), None::<String>);
+    thread_pool.install(move || {
+        let replies = batch.into_inner()
+            .into_par_iter()
+            .map(|request| {
+                let (from, session, op_id, op) = request.into_inner();
 
-    let per_thread_distribution = batch.len() / THREAD_POOL_THREADS as usize;
+                let reply = speculatively_execute_unordered(application, state, op);
 
-    thread_pool.scoped(|scope| {
-        batch
-            .into_inner()
-            .into_iter()
-            .chunks(per_thread_distribution)
-            .into_iter()
-            .for_each(|chunk| {
-                let tx = tx.clone();
-                let chunk = chunk.collect::<Vec<_>>();
+                UpdateReply::init(from, session, op_id, reply)
+            })
+            .collect::<Vec<_>>();
 
-                scope.execute(move || {
-                    let mut replies = Vec::new();
-
-                    chunk.into_iter().for_each(|request| {
-                        let (from, session, op_id, op) = request.into_inner();
-
-                        let reply = speculatively_execute_unordered(application, state, op);
-
-                        replies.push(UpdateReply::init(from, session, op_id, reply));
-                    });
-
-                    tx.send_return(replies).unwrap();
-                });
-            });
-
-        while let Ok(mut reply) = rx.recv() {
-            replies.append(&mut reply);
-        }
-    });
-
-    replies
+        replies.into()
+    })
 }
 
 /// Apply the given results of execution to the state
@@ -350,7 +213,7 @@ fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult
         S: CRUDState,
 {
     for unit in execution_units {
-        unit.alterations.iter().for_each(|alteration| {
+        unit.alterations().iter().for_each(|alteration| {
             match alteration.access_type {
                 AccessType::Read => {
                     // Ignore read accesses as they do not affect the state
@@ -358,11 +221,11 @@ fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult
                 AccessType::Write => {
                     //TODO: If this repeats various write accesses to the same key,
                     // Reduce them all into a single access
-                    unit.cache.get(&alteration.column).map(|value| {
+                    if let Some(value) = unit.cache().get(&alteration.column) {
                         if let Some(value) = value.get(&alteration.key) {
                             state.update(&alteration.column, &alteration.key, value);
                         }
-                    });
+                    }
                 }
                 AccessType::Delete => {
                     state.delete(&alteration.column, &alteration.key);
@@ -372,6 +235,7 @@ fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult
     }
 }
 
+#[inline(always)]
 /// Speculatively execute an unordered operation
 fn speculatively_execute_unordered<A, S>(
     application: &A,
@@ -382,110 +246,6 @@ fn speculatively_execute_unordered<A, S>(
         A: Application<S>,
 {
     application.unordered_execution(state, request)
-}
-
-pub struct Collisions {
-    /// The indexes within the batch of the operations
-    collided: BTreeSet<usize>,
-}
-
-struct CollisionState {
-    accessed: HashMap<Vec<u8>, (BTreeSet<AccessType>, BTreeSet<usize>)>,
-    collisions: BTreeSet<usize>,
-}
-
-/// Progress the collision state with the given execution unit
-/// This allows the thread to not be waiting the finish of all tasks before actually starting to
-/// calculate the collisions
-fn progress_collision_state(state: &mut CollisionState, unit: &ExecutionResult) -> bool {
-    let mut collided = false;
-
-    unit.alterations.iter().for_each(|access| {
-        if let Some((accesses, operation_seq)) = state.accessed.get_mut(&access.key) {
-            for access_type in accesses.iter() {
-                if access_type.is_collision(&access.access_type) {
-                    state.collisions.insert(unit.position_in_batch);
-
-                    for seq in operation_seq.iter() {
-                        state.collisions.insert(*seq);
-                    }
-
-                    collided = true;
-                }
-            }
-
-            operation_seq.insert(unit.position_in_batch);
-            accesses.insert(access.access_type);
-        } else {
-            let mut accesses = BTreeSet::new();
-            let mut accessors = BTreeSet::new();
-
-            accessors.insert(unit.position_in_batch);
-            accesses.insert(access.access_type);
-
-            state
-                .accessed
-                .insert(access.key.clone(), (accesses, accessors));
-        }
-    });
-
-    collided
-}
-
-/// Calculate collisions of data accesses within a batch, returns all
-/// of the operations that must be executed sequentially
-fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Collisions>
-    where
-        S: CRUDState,
-{
-    let mut accessed: HashMap<String, HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>> =
-        Default::default();
-
-    let mut collisions = BTreeSet::new();
-
-    for unit in execution_units {
-        unit.alterations.borrow().iter().for_each(|access| {
-            if let Some(accesses) = accessed.get_mut(&access.column) {
-                if let Some((accesses, operation_seq)) = accesses.get_mut(&access.key) {
-                    for access_type in accesses.iter() {
-                        if access_type.is_collision(&access.access_type) {
-                            collisions.insert(unit.position_in_batch);
-
-                            for seq in operation_seq.iter() {
-                                collisions.insert(*seq);
-                            }
-                        }
-                    }
-
-                    operation_seq.push(unit.position_in_batch);
-                    accesses.push(access.access_type);
-                } else {
-                    accesses.insert(
-                        access.key.clone(),
-                        (vec![access.access_type], vec![unit.position_in_batch]),
-                    );
-                }
-            } else {
-                let mut accesses: HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)> =
-                    Default::default();
-
-                accesses.insert(
-                    access.key.clone(),
-                    (vec![access.access_type], vec![unit.position_in_batch]),
-                );
-
-                accessed.insert(access.column.clone(), accesses);
-            }
-        });
-    }
-
-    if collisions.is_empty() {
-        None
-    } else {
-        Some(Collisions {
-            collided: collisions,
-        })
-    }
 }
 
 impl Access {

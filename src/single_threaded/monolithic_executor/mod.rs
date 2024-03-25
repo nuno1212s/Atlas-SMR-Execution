@@ -15,7 +15,7 @@ use atlas_smr_core::SMRReply;
 use log::info;
 use std::sync::Arc;
 use std::time::Instant;
-use scoped_threadpool::Pool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use crate::scalable::scalable_unordered_execution;
 use crate::single_threaded::UnorderedExecutor;
 
@@ -29,7 +29,7 @@ pub struct MonolithicExecutor<S, A, NT>
 {
     application: A,
     state: S,
-    t_pool: Pool,
+    t_pool: ThreadPool,
 
     work_rx: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     state_rx: ChannelSyncRx<InstallStateMessage<S>>,
@@ -85,7 +85,7 @@ impl<S, A, NT> MonolithicExecutor<S, A, NT>
         let mut executor = MonolithicExecutor {
             application: service,
             state,
-            t_pool: Pool::new(4),
+            t_pool: ThreadPoolBuilder::new().num_threads(4).build()?,
             work_rx: handle,
             state_rx,
             checkpoint_tx,

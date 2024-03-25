@@ -16,9 +16,9 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 use log::info;
-use scoped_threadpool::Pool;
 use std::sync::Arc;
 use std::time::Instant;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
@@ -35,7 +35,7 @@ pub struct ScalableMonolithicExecutor<S, A, NT>
     state_rx: ChannelSyncRx<InstallStateMessage<S>>,
     checkpoint_tx: ChannelSyncTx<AppStateMessage<S>>,
 
-    thread_pool: Pool,
+    thread_pool: ThreadPool,
 
     send_node: Arc<NT>,
 }
@@ -87,7 +87,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
             work_rx: handle,
             state_rx,
             checkpoint_tx,
-            thread_pool: Pool::new(THREAD_POOL_THREADS),
+            thread_pool: ThreadPoolBuilder::new().num_threads(4).build()?,
             send_node,
         };
 

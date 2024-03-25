@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-
-use scoped_threadpool::Pool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use atlas_common::channel;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
@@ -41,7 +40,7 @@ pub struct ScalableDivisibleStateExecutor<S, A, NT>
     state_rx: ChannelSyncRx<InstallStateMessage<S>>,
     checkpoint_tx: ChannelSyncTx<AppStateMessage<S>>,
 
-    thread_pool: Pool,
+    thread_pool: ThreadPool,
 
     send_node: Arc<NT>,
 
@@ -95,7 +94,10 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
             work_rx: handle,
             state_rx,
             checkpoint_tx,
-            thread_pool: Pool::new(THREAD_POOL_THREADS),
+            thread_pool: ThreadPoolBuilder::new()
+                .num_threads(THREAD_POOL_THREADS as usize)
+                .build()
+                .unwrap(),
             send_node,
             last_checkpoint_descriptor: descriptor,
         };
@@ -124,7 +126,6 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
         where
             T: ExecutorReplier + 'static,
             NT: ReplyNode<SMRReply<A::AppData>> + 'static, {
-
         while let Ok(exec_req) = self.work_rx.recv() {
             match exec_req {
                 ExecutionRequest::PollStateChannel => {
@@ -150,7 +151,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                 }
                 ExecutionRequest::Update((batch, instant)) => {
                     metric_duration(EXECUTION_LATENCY_TIME_ID, instant.elapsed());
-                    
+
                     let (seq_no, reply_batch) = self.execute_op_batch(batch);
 
                     // deliver replies
@@ -179,14 +180,13 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                         &self.state,
                         batch,
                     );
-                    
+
                     metric_increment(UNORDERED_EXECUTION_TIME_TAKEN_ID, Some(op_count));
 
                     self.execution_finished::<T>(None, reply);
                 }
             }
         }
-
     }
 
     fn execute_op_batch(&mut self, batch: UpdateBatch<Request<A, S>>) -> (SeqNo, BatchReplies<Reply<A, S>>) {

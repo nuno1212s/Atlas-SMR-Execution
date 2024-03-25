@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-use scoped_threadpool::Pool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::ExecutorReplier;
 use atlas_common::channel;
@@ -35,7 +35,7 @@ pub struct DivisibleStateExecutor<S, A, NT>
 {
     application: A,
     state: S,
-    t_pool: Pool,
+    t_pool: ThreadPool,
 
     work_rx: ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     state_rx: ChannelSyncRx<InstallStateMessage<S>>,
@@ -91,7 +91,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
         let mut executor = DivisibleStateExecutor {
             application: service,
             state,
-            t_pool: Pool::new(4),
+            t_pool: ThreadPoolBuilder::new().num_threads(4).build()?,
             work_rx: handle,
             state_rx,
             checkpoint_tx,
@@ -163,13 +163,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
                     todo!()
                 }
                 ExecutionRequest::ExecuteUnordered(batch) => {
-                    let operations = batch.len() as u64;
-
-                    let reply_batch = self
-                        .application
-                        .unordered_batched_execution(&self.state, batch);
-
-                    metric_increment(UNORDERED_OPS_PER_SECOND_ID, Some(operations));
+                    let reply_batch = self.execute_unordered(batch);
 
                     self.execution_finished::<T>(None, reply_batch);
                 }
@@ -194,7 +188,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
         (seq_no, reply_batch)
     }
 
-    ///Clones the current state and delivers it to the application
+    /// Clones the current state and delivers it to the application
     /// Takes a sequence number, which corresponds to the last executed consensus instance before we performed the checkpoint
     fn deliver_checkpoint_state(&mut self, seq: SeqNo) {
         let current_state = self
