@@ -5,6 +5,7 @@ use atlas_metrics::metrics::MetricKind;
 pub const EXECUTION_LATENCY_TIME: &str = "EXECUTION_LATENCY";
 pub const EXECUTION_LATENCY_TIME_ID: usize = 800;
 
+/// Time taken to execute a batch of operations
 pub const EXECUTION_TIME_TAKEN: &str = "EXECUTION_TIME_TAKEN";
 pub const EXECUTION_TIME_TAKEN_ID: usize = 801;
 
