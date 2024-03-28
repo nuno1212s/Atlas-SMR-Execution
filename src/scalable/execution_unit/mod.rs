@@ -1,11 +1,11 @@
 //mod v2;
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use getset::{CopyGetters, Getters};
+use crate::scalable::{Access, AccessType, CRUDState};
 use atlas_common::collections::HashMap;
 use atlas_common::ordering::SeqNo;
-use crate::scalable::{Access, AccessType, CRUDState};
+use getset::{CopyGetters, Getters};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A data structure that represents a single execution unit
 /// Which can be speculatively parallelized.
@@ -13,8 +13,8 @@ use crate::scalable::{Access, AccessType, CRUDState};
 /// All changes made here are done in a local cache and are only applied to
 /// the state once it is verified to be free of collisions from other operations.
 pub struct ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
     /// The sequence number of the batch this operation belongs to
     pub(super) seq_no: SeqNo,
@@ -39,8 +39,8 @@ unsafe impl<'a, S> Sync for ExecutionUnit<'a, S> where S: CRUDState {}
 unsafe impl<'a, S> Send for ExecutionUnit<'a, S> where S: CRUDState {}
 
 impl<'a, S> CRUDState for ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
     fn create(&mut self, column: &str, key: &[u8], value: &[u8]) -> bool {
         self.accesses
@@ -117,10 +117,9 @@ impl<'a, S> CRUDState for ExecutionUnit<'a, S>
 }
 
 impl<'a, S> ExecutionUnit<'a, S>
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
-
     ///
     pub fn complete(self) -> ExecutionResult {
         ExecutionResult {
@@ -147,7 +146,6 @@ pub struct ExecutionResult {
     #[get = "pub(super)"]
     cache: HashMap<String, HashMap<Vec<u8>, Vec<u8>>>,
 }
-
 
 pub struct Collisions {
     /// The indexes within the batch of the operations
@@ -201,8 +199,8 @@ pub(super) fn progress_collision_state(state: &mut CollisionState, unit: &Execut
 /// Calculate collisions of data accesses within a batch, returns all
 /// of the operations that must be executed sequentially
 fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Collisions>
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
     let mut accessed: HashMap<String, HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>> =
         Default::default();

@@ -1,6 +1,6 @@
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::ExecutorReplier;
 use atlas_common::channel;
@@ -9,7 +9,9 @@ use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_metrics::metrics::{metric_duration, metric_increment};
-use atlas_smr_application::app::{Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch};
+use atlas_smr_application::app::{
+    Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
+};
 
 use atlas_smr_application::state::divisible_state::{
     AppState, AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage,
@@ -18,9 +20,14 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 
-use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_OPS_PER_SECOND_ID};
-use crate::scalable::scalable_unordered_execution;
-use crate::single_threaded::UnorderedExecutor;
+use crate::metric::{
+    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
+    UNORDERED_OPS_PER_SECOND_ID,
+};
+use crate::scalable::{sc_execute_unordered_op_batch, scalable_unordered_execution};
+use crate::single_threaded::{
+    st_execute_op_batch, st_execute_unordered_op_batch, UnorderedExecutor,
+};
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
@@ -28,10 +35,10 @@ const STATE_BUFFER: usize = 128;
 const PARTS_PER_DELIVERY: usize = 4;
 
 pub struct DivisibleStateExecutor<S, A, NT>
-    where
-        S: DivisibleState + 'static,
-        A: Application<S> + 'static,
-        NT: 'static,
+where
+    S: DivisibleState + 'static,
+    A: Application<S> + 'static,
+    NT: 'static,
 {
     application: A,
     state: S,
@@ -47,9 +54,9 @@ pub struct DivisibleStateExecutor<S, A, NT>
 }
 
 impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
-    where
-        S: DivisibleState + 'static + Send,
-        A: Application<S> + 'static + Send,
+where
+    S: DivisibleState + 'static + Send,
+    A: Application<S> + 'static + Send,
 {
     pub fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -70,9 +77,9 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
         ChannelSyncTx<InstallStateMessage<S>>,
         ChannelSyncRx<AppStateMessage<S>>,
     )>
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         let (state, requests) = if let Some(state) = initial_state {
             state
@@ -112,9 +119,9 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
     }
 
     pub fn worker<T>(&mut self)
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>>,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>>,
     {
         while let Ok(exec_req) = self.work_rx.recv() {
             match exec_req {
@@ -124,8 +131,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
                         match state_recvd {
                             InstallStateMessage::StateDescriptor(_) => {}
                             InstallStateMessage::StatePart(state_part) => {
-                                self
-                                    .state
+                                self.state
                                     .accept_parts(state_part.into_vec())
                                     .expect("Failed to install state parts into self");
                             }
@@ -142,7 +148,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
                 }
                 ExecutionRequest::Update((batch, instant)) => {
                     metric_duration(EXECUTION_LATENCY_TIME_ID, instant.elapsed());
-                    
+
                     let (seq_no, reply_batch) = self.execute_op_batch(batch);
 
                     // deliver replies
@@ -152,7 +158,7 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
                     metric_duration(EXECUTION_LATENCY_TIME_ID, instant.elapsed());
 
                     let (seq_no, reply_batch) = self.execute_op_batch(batch);
-                    
+
                     // deliver checkpoint state to the replica
                     self.deliver_checkpoint_state(seq_no);
 
@@ -171,21 +177,11 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
         }
     }
 
-    fn execute_op_batch(&mut self, batch: UpdateBatch<Request<A, S>>) -> (SeqNo, BatchReplies<Reply<A, S>>) {
-        let seq_no = batch.sequence_number();
-        let operations = batch.len() as u64;
-
-
-        let start = Instant::now();
-
-        let reply_batch = self
-            .application
-            .update_batch(&mut self.state, batch);
-
-        metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
-        metric_increment(OPERATIONS_EXECUTED_PER_SECOND_ID, Some(operations));
-        
-        (seq_no, reply_batch)
+    fn execute_op_batch(
+        &mut self,
+        batch: UpdateBatch<Request<A, S>>,
+    ) -> (SeqNo, BatchReplies<Reply<A, S>>) {
+        st_execute_op_batch(&self.application, &mut self.state, batch)
     }
 
     /// Clones the current state and delivers it to the application
@@ -228,9 +224,9 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
-            T: ExecutorReplier + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+        T: ExecutorReplier + 'static,
     {
         let send_node = self.send_node.clone();
 
@@ -238,42 +234,36 @@ impl<S, A, NT> DivisibleStateExecutor<S, A, NT>
     }
 }
 
-
 impl<S, A, NT> UnorderedExecutor<A, S> for DivisibleStateExecutor<S, A, NT>
+where
+    S: DivisibleState + 'static,
+    A: Application<S> + 'static + Send,
+    NT: 'static,
+{
+    default fn execute_unordered(
+        &mut self,
+        batch: UnorderedBatch<Request<A, S>>,
+    ) -> BatchReplies<Reply<A, S>>
     where
-        S: DivisibleState + 'static,
-        A: Application<S> + 'static + Send,
-        NT: 'static, {
-    default fn execute_unordered(&mut self, batch: UnorderedBatch<Request<A, S>>) -> BatchReplies<Reply<A, S>> where A: Application<S> {
-        let operations = batch.len() as u64;
-
-        let reply_batch = self
-            .application
-            .unordered_batched_execution(&self.state, batch);
-
-        metric_increment(UNORDERED_OPS_PER_SECOND_ID, Some(operations));
-
-        reply_batch
+        A: Application<S>,
+    {
+        st_execute_unordered_op_batch(&self.application, &self.state, batch)
     }
 }
 
 impl<S, A, NT> UnorderedExecutor<A, S> for DivisibleStateExecutor<S, A, NT>
+where
+    S: DivisibleState + Sync + 'static,
+    A: Application<S> + 'static + Send,
+    NT: 'static,
+{
+    fn execute_unordered(
+        &mut self,
+        batch: UnorderedBatch<Request<A, S>>,
+    ) -> BatchReplies<Reply<A, S>>
     where
-        S: DivisibleState + Sync + 'static,
-        A: Application<S> + 'static + Send,
-        NT: 'static, {
-    fn execute_unordered(&mut self, batch: UnorderedBatch<Request<A, S>>) -> BatchReplies<Reply<A, S>> where A: Application<S> {
-        let operations = batch.len() as u64;
-
-        let reply_batch = scalable_unordered_execution(
-            &mut self.t_pool,
-            &self.application,
-            &self.state,
-            batch,
-        );
-
-        metric_increment(UNORDERED_OPS_PER_SECOND_ID, Some(operations));
-
-        reply_batch
+        A: Application<S>,
+    {
+        sc_execute_unordered_op_batch(&mut self.t_pool, &self.application, &self.state, batch)
     }
 }

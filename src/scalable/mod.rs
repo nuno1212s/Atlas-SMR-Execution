@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -8,15 +9,22 @@ use rayon::ThreadPool;
 
 use atlas_common::channel;
 use atlas_common::ordering::{Orderable, SeqNo};
+use atlas_metrics::metrics::{metric_duration, metric_increment};
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
 };
 
-use crate::scalable::execution_unit::{CollisionState, ExecutionResult, ExecutionUnit, progress_collision_state};
+use crate::metric::{
+    EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_EXECUTION_TIME_TAKEN_ID,
+    UNORDERED_OPS_PER_SECOND_ID,
+};
+use crate::scalable::execution_unit::{
+    progress_collision_state, CollisionState, ExecutionResult, ExecutionUnit,
+};
 
 pub mod divisible_state_exec;
-pub mod monolithic_exec;
 mod execution_unit;
+pub mod monolithic_exec;
 
 /// How many threads should we use in the execution threadpool
 const THREAD_POOL_THREADS: u32 = 4;
@@ -54,8 +62,8 @@ pub trait CRUDState: Send {
 
 /// A trait defining the methods required for an application to be scalable
 pub trait ScalableApp<S>: Application<S> + Sync
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
     /// This execution method takes a dynamic reference to the state. This is because
     /// We will pass it an ExecutionUnit which is not S, so it must handle any state that
@@ -76,9 +84,9 @@ fn scalable_execution<'a, A, S>(
     state: &mut S,
     batch: UpdateBatch<Request<A, S>>,
 ) -> BatchReplies<Reply<A, S>>
-    where
-        A: ScalableApp<S>,
-        S: CRUDState + Sync + Send + 'a,
+where
+    A: ScalableApp<S>,
+    S: CRUDState + Sync + Send + 'a,
 {
     let seq_no = batch.sequence_number();
 
@@ -102,11 +110,10 @@ fn scalable_execution<'a, A, S>(
         // Start the workers that will process all the updates.
         // These updates are kept mostly in order
         for chunk in 0..updates.chunks(chunk_size).count() {
-            
             let state = &*state;
             let tx = tx.clone();
             let updates = &updates;
-            
+
             scope.spawn(move |_scope| {
                 updates
                     .chunks(chunk_size)
@@ -124,8 +131,8 @@ fn scalable_execution<'a, A, S>(
                             state_reference: state,
                         };
 
-                        let reply =
-                            application.speculatively_execute(&mut exec_unit, request.operation().clone());
+                        let reply = application
+                            .speculatively_execute(&mut exec_unit, request.operation().clone());
 
                         tx.send_return((
                             *pos,
@@ -137,7 +144,7 @@ fn scalable_execution<'a, A, S>(
                                 reply,
                             ),
                         ))
-                            .unwrap();
+                        .unwrap();
                     });
             });
         }
@@ -187,12 +194,13 @@ pub(super) fn scalable_unordered_execution<A, S>(
     state: &S,
     batch: UnorderedBatch<Request<A, S>>,
 ) -> BatchReplies<Reply<A, S>>
-    where
-        A: Application<S>,
-        S: Send + Sync,
+where
+    A: Application<S>,
+    S: Send + Sync,
 {
     thread_pool.install(move || {
-        let replies = batch.into_inner()
+        let replies = batch
+            .into_inner()
             .into_par_iter()
             .map(|request| {
                 let (from, session, op_id, op) = request.into_inner();
@@ -209,8 +217,8 @@ pub(super) fn scalable_unordered_execution<A, S>(
 
 /// Apply the given results of execution to the state
 fn apply_results_to_state<S>(state: &mut S, execution_units: Vec<ExecutionResult>)
-    where
-        S: CRUDState,
+where
+    S: CRUDState,
 {
     for unit in execution_units {
         unit.alterations().iter().for_each(|alteration| {
@@ -242,10 +250,55 @@ fn speculatively_execute_unordered<A, S>(
     state: &S,
     request: Request<A, S>,
 ) -> Reply<A, S>
-    where
-        A: Application<S>,
+where
+    A: Application<S>,
 {
     application.unordered_execution(state, request)
+}
+
+#[inline(always)]
+pub(crate) fn sc_execute_unordered_op_batch<A, S>(
+    thread_pool: &mut ThreadPool,
+    application: &A,
+    state: &S,
+    batch: UnorderedBatch<Request<A, S>>,
+) -> BatchReplies<Reply<A, S>>
+where
+    A: Application<S>,
+    S: Send + Sync,
+{
+    let op_count = batch.len() as u64;
+    let exec_start_time = Instant::now();
+
+    let reply = scalable_unordered_execution(thread_pool, application, state, batch);
+
+    metric_increment(UNORDERED_OPS_PER_SECOND_ID, Some(op_count));
+    metric_duration(UNORDERED_EXECUTION_TIME_TAKEN_ID, exec_start_time.elapsed());
+
+    reply
+}
+
+fn sc_execute_op_batch<A, S>(
+    thread_pool: &mut ThreadPool,
+    application: &A,
+    state: &mut S,
+    batch: UpdateBatch<Request<A, S>>,
+) -> (SeqNo, BatchReplies<Reply<A, S>>)
+where
+    A: ScalableApp<S>,
+    S: CRUDState + Send + Sync,
+{
+    let seq_no = batch.sequence_number();
+    let operations = batch.len() as u64;
+
+    let start = Instant::now();
+
+    let reply_batch = scalable_execution(thread_pool, application, state, batch);
+
+    metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
+    metric_increment(OPERATIONS_EXECUTED_PER_SECOND_ID, Some(operations));
+
+    (seq_no, reply_batch)
 }
 
 impl Access {

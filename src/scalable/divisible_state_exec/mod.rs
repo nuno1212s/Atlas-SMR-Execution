@@ -1,6 +1,6 @@
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use atlas_common::channel;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
@@ -8,7 +8,9 @@ use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_metrics::metrics::{metric_duration, metric_increment};
-use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request, UpdateBatch};
+use atlas_smr_application::app::{
+    AppData, Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
+};
 use atlas_smr_application::state::divisible_state::{
     AppState, AppStateMessage, DivisibleState, DivisibleStateDescriptor, InstallStateMessage,
 };
@@ -16,9 +18,13 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 
-use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_EXECUTION_TIME_TAKEN_ID};
+use crate::metric::{
+    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
+    UNORDERED_EXECUTION_TIME_TAKEN_ID, UNORDERED_OPS_PER_SECOND_ID,
+};
 use crate::scalable::{
-    scalable_execution, scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
+    sc_execute_op_batch, sc_execute_unordered_op_batch, scalable_execution,
+    scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
 };
 use crate::ExecutorReplier;
 
@@ -28,10 +34,10 @@ const STATE_BUFFER: usize = 128;
 const PARTS_PER_DELIVERY: usize = 4;
 
 pub struct ScalableDivisibleStateExecutor<S, A, NT>
-    where
-        S: DivisibleState + CRUDState + 'static + Send + Sync,
-        A: ScalableApp<S> + 'static,
-        NT: 'static,
+where
+    S: DivisibleState + CRUDState + 'static + Send + Sync,
+    A: ScalableApp<S> + 'static,
+    NT: 'static,
 {
     application: A,
     state: S,
@@ -48,9 +54,9 @@ pub struct ScalableDivisibleStateExecutor<S, A, NT>
 }
 
 impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
-    where
-        S: DivisibleState + CRUDState + 'static + Sync,
-        A: ScalableApp<S> + 'static + Send,
+where
+    S: DivisibleState + CRUDState + 'static + Sync,
+    A: ScalableApp<S> + 'static + Send,
 {
     pub fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -70,9 +76,9 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
         ChannelSyncTx<InstallStateMessage<S>>,
         ChannelSyncRx<AppStateMessage<S>>,
     )>
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         let (state, requests) = if let Some(state) = initial_state {
             state
@@ -112,9 +118,9 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
     }
 
     fn run<T>(mut self)
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         std::thread::Builder::new()
             .name("Executor thread".to_string())
@@ -123,9 +129,10 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
     }
 
     fn worker<T>(&mut self)
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static, {
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    {
         while let Ok(exec_req) = self.work_rx.recv() {
             match exec_req {
                 ExecutionRequest::PollStateChannel => {
@@ -172,16 +179,7 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
                     todo!()
                 }
                 ExecutionRequest::ExecuteUnordered(batch) => {
-                    let op_count = batch.len() as u64;
-
-                    let reply = scalable_unordered_execution(
-                        &mut self.thread_pool,
-                        &self.application,
-                        &self.state,
-                        batch,
-                    );
-
-                    metric_increment(UNORDERED_EXECUTION_TIME_TAKEN_ID, Some(op_count));
+                    let reply = self.execute_unordered_op_batch(batch);
 
                     self.execution_finished::<T>(None, reply);
                 }
@@ -189,23 +187,25 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
         }
     }
 
-    fn execute_op_batch(&mut self, batch: UpdateBatch<Request<A, S>>) -> (SeqNo, BatchReplies<Reply<A, S>>) {
-        let seq_no = batch.sequence_number();
-        let operations = batch.len() as u64;
+    #[inline(always)]
+    fn execute_unordered_op_batch(
+        &mut self,
+        batch: UnorderedBatch<Request<A, S>>,
+    ) -> BatchReplies<Reply<A, S>> {
+        sc_execute_unordered_op_batch(&mut self.thread_pool, &self.application, &self.state, batch)
+    }
 
-        let start = Instant::now();
-
-        let reply_batch = scalable_execution(
+    #[inline(always)]
+    fn execute_op_batch(
+        &mut self,
+        batch: UpdateBatch<Request<A, S>>,
+    ) -> (SeqNo, BatchReplies<Reply<A, S>>) {
+        sc_execute_op_batch(
             &mut self.thread_pool,
             &self.application,
             &mut self.state,
             batch,
-        );
-
-        metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
-        metric_increment(OPERATIONS_EXECUTED_PER_SECOND_ID, Some(operations));
-
-        (seq_no, reply_batch)
+        )
     }
 
     ///Clones the current state and delivers it to the application
@@ -248,9 +248,9 @@ impl<S, A, NT> ScalableDivisibleStateExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
-            T: ExecutorReplier + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+        T: ExecutorReplier + 'static,
     {
         let send_node = self.send_node.clone();
 

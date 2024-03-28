@@ -18,10 +18,9 @@ use atlas_smr_application::state::monolithic_state::{
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::{ReplyNode, RequestType};
 use atlas_smr_core::SMRReply;
+use log::error;
 use std::sync::Arc;
 use std::time::Instant;
-use log::error;
-
 
 pub mod metric;
 pub mod scalable;
@@ -39,10 +38,10 @@ pub struct MultiThreadedDivExecutor;
 /// (In reality since all communication is done via channels, this ends up just defining the
 /// initialisation method)
 pub trait TDivisibleStateExecutor<A, S, NT>
-    where
-        A: Application<S> + 'static,
-        S: DivisibleState + 'static,
-        NT: 'static,
+where
+    A: Application<S> + 'static,
+    S: DivisibleState + 'static,
+    NT: 'static,
 {
     /// Initialize a handle and a channel to receive requests
     fn init_handle() -> (
@@ -62,18 +61,18 @@ pub trait TDivisibleStateExecutor<A, S, NT>
         ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
         ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static;
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static;
 }
 
 /// Trait defining the necessary methods for a monolithic state executor
 /// (In reality since all communication is done via channels, this ends up just defining the
 /// initialisation method)
 pub trait TMonolithicStateExecutor<A, S, NT>
-    where
-        A: Application<S> + 'static,
-        S: MonolithicState + 'static,
-        NT: 'static,
+where
+    A: Application<S> + 'static,
+    S: MonolithicState + 'static,
+    NT: 'static,
 {
     /// Initialize a handle and a channel to receive requests
     fn init_handle() -> (
@@ -93,15 +92,15 @@ pub trait TMonolithicStateExecutor<A, S, NT>
         ChannelSyncTx<state::monolithic_state::InstallStateMessage<S>>,
         ChannelSyncRx<state::monolithic_state::AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static;
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static;
 }
 
 impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for SingleThreadedDivExecutor
-    where
-        A: Application<S> + 'static,
-        S: DivisibleState + Send + 'static,
-        NT: 'static,
+where
+    A: Application<S> + 'static,
+    S: DivisibleState + Send + 'static,
+    NT: 'static,
 {
     fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -119,8 +118,8 @@ impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for SingleThreadedDivExecutor
         ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
         ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         single_threaded::divisible_state_exec::DivisibleStateExecutor::<S, A, NT>::init::<
             ReplicaReplier,
@@ -129,10 +128,10 @@ impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for SingleThreadedDivExecutor
 }
 
 impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for MultiThreadedDivExecutor
-    where
-        A: ScalableApp<S> + Send + 'static,
-        S: DivisibleState + CRUDState + Send + Sync + 'static,
-        NT: 'static,
+where
+    A: ScalableApp<S> + Send + 'static,
+    S: DivisibleState + CRUDState + Send + Sync + 'static,
+    NT: 'static,
 {
     fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -150,8 +149,8 @@ impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for MultiThreadedDivExecutor
         ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
         ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         scalable::divisible_state_exec::ScalableDivisibleStateExecutor::<S, A, NT>::init::<
             ReplicaReplier,
@@ -160,10 +159,10 @@ impl<A, S, NT> TDivisibleStateExecutor<A, S, NT> for MultiThreadedDivExecutor
 }
 
 impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for SingleThreadedMonExecutor
-    where
-        A: Application<S> + 'static,
-        S: MonolithicState + 'static,
-        NT: 'static,
+where
+    A: Application<S> + 'static,
+    S: MonolithicState + 'static,
+    NT: 'static,
 {
     fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -181,8 +180,8 @@ impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for SingleThreadedMonExecutor
         ChannelSyncTx<InstallStateMessage<S>>,
         ChannelSyncRx<AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         single_threaded::monolithic_executor::MonolithicExecutor::<S, A, NT>::init::<ReplicaReplier>(
             work_receiver,
@@ -194,10 +193,10 @@ impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for SingleThreadedMonExecutor
 }
 
 impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for MultiThreadedMonExecutor
-    where
-        A: ScalableApp<S> + 'static,
-        S: MonolithicState + CRUDState + Send + Sync + 'static,
-        NT: 'static,
+where
+    A: ScalableApp<S> + 'static,
+    S: MonolithicState + CRUDState + Send + Sync + 'static,
+    NT: 'static,
 {
     fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -215,8 +214,8 @@ impl<A, S, NT> TMonolithicStateExecutor<A, S, NT> for MultiThreadedMonExecutor
         ChannelSyncTx<InstallStateMessage<S>>,
         ChannelSyncRx<AppStateMessage<S>>,
     )>
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         scalable::monolithic_exec::ScalableMonolithicExecutor::<S, A, NT>::init::<ReplicaReplier>(
             work_receiver,
@@ -232,18 +231,18 @@ const EXECUTING_BUFFER: usize = 16384;
 
 pub trait ExecutorReplier: Send {
     fn execution_finished<D, NT>(node: Arc<NT>, seq: Option<SeqNo>, batch: BatchReplies<D::Reply>)
-        where
-            D: ApplicationData + 'static,
-            NT: ReplyNode<SMRReply<D>> + 'static;
+    where
+        D: ApplicationData + 'static,
+        NT: ReplyNode<SMRReply<D>> + 'static;
 }
 
 pub struct FollowerReplier;
 
 impl ExecutorReplier for FollowerReplier {
     fn execution_finished<D, NT>(node: Arc<NT>, seq: Option<SeqNo>, batch: BatchReplies<D::Reply>)
-        where
-            D: ApplicationData + 'static,
-            NT: ReplyNode<SMRReply<D>> + 'static,
+    where
+        D: ApplicationData + 'static,
+        NT: ReplyNode<SMRReply<D>> + 'static,
     {
         if seq.is_none() {
             //Followers only deliver replies to the unordered requests, since it's not part of the quorum
@@ -297,7 +296,9 @@ impl ExecutorReplier for ReplicaReplier {
                 if let Some((message, last_peer_id)) = curr_send.take() {
                     let flush = peer_id != last_peer_id;
 
-                    if let Err(err) = send_node.send_signed(batch_type, message, last_peer_id, flush) {
+                    if let Err(err) =
+                        send_node.send_signed(batch_type, message, last_peer_id, flush)
+                    {
                         error!("Failed to send reply to node {:?} {:?}", peer_id, err);
                     }
                 }

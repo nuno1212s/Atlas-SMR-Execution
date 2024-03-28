@@ -1,5 +1,5 @@
-use atlas_metrics::{MetricLevel, MetricRegistry};
 use atlas_metrics::metrics::MetricKind;
+use atlas_metrics::{MetricLevel, MetricRegistry};
 
 /// SMR Execution will get 8XX
 pub const EXECUTION_LATENCY_TIME: &str = "EXECUTION_LATENCY";

@@ -1,6 +1,10 @@
-use crate::metric::{EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_EXECUTION_TIME_TAKEN_ID};
+use crate::metric::{
+    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
+    UNORDERED_EXECUTION_TIME_TAKEN_ID, UNORDERED_OPS_PER_SECOND_ID,
+};
 use crate::scalable::{
-    scalable_execution, scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
+    sc_execute_op_batch, sc_execute_unordered_op_batch, scalable_execution,
+    scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
 };
 use crate::ExecutorReplier;
 use atlas_common::channel;
@@ -8,7 +12,9 @@ use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_metrics::metrics::{metric_duration, metric_increment};
-use atlas_smr_application::app::{AppData, Application, BatchReplies, Reply, Request, UpdateBatch};
+use atlas_smr_application::app::{
+    AppData, Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
+};
 use atlas_smr_application::state::monolithic_state::{
     AppStateMessage, InstallStateMessage, MonolithicState,
 };
@@ -16,17 +22,17 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 use log::info;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
 
 pub struct ScalableMonolithicExecutor<S, A, NT>
-    where
-        S: MonolithicState + 'static + Send + Sync,
-        A: Application<S> + 'static,
+where
+    S: MonolithicState + 'static + Send + Sync,
+    A: Application<S> + 'static,
 {
     application: A,
     state: S,
@@ -41,10 +47,10 @@ pub struct ScalableMonolithicExecutor<S, A, NT>
 }
 
 impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
-    where
-        S: MonolithicState + CRUDState + 'static + Send + Sync,
-        A: ScalableApp<S> + 'static + Send,
-        NT: 'static,
+where
+    S: MonolithicState + CRUDState + 'static + Send + Sync,
+    A: ScalableApp<S> + 'static + Send,
+    NT: 'static,
 {
     pub fn init_handle() -> (
         ExecutorHandle<Request<A, S>>,
@@ -65,9 +71,9 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
         ChannelSyncTx<InstallStateMessage<S>>,
         ChannelSyncRx<AppStateMessage<S>>,
     )>
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         let (state, requests) = if let Some(state) = initial_state {
             state
@@ -101,9 +107,9 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     }
 
     fn run<T>(mut self)
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         std::thread::Builder::new()
             .name("Executor Manager Thread".to_string())
@@ -112,9 +118,9 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     }
 
     fn worker<T>(&mut self)
-        where
-            T: ExecutorReplier + 'static,
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+    where
+        T: ExecutorReplier + 'static,
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
         while let Ok(exec_req) = self.work_rx.recv() {
             match exec_req {
@@ -133,11 +139,10 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
                     }
                 }
                 ExecutionRequest::Update((batch, instant)) => {
-
                     metric_duration(EXECUTION_LATENCY_TIME_ID, instant.elapsed());
 
                     let (seq_no, reply_batch) = self.execute_op_batch(batch);
-                    
+
                     // deliver replies
                     self.execution_finished::<T>(Some(seq_no), reply_batch);
                 }
@@ -156,16 +161,7 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
                     todo!()
                 }
                 ExecutionRequest::ExecuteUnordered(batch) => {
-                    let op_count = batch.len() as u64;
-                    
-                    let reply = scalable_unordered_execution(
-                        &mut self.thread_pool,
-                        &self.application,
-                        &mut self.state,
-                        batch,
-                    );
-                    
-                    metric_increment(UNORDERED_EXECUTION_TIME_TAKEN_ID, Some(op_count));
+                    let reply = self.execute_unordered_op_batch(batch);
 
                     self.execution_finished::<T>(None, reply);
                 }
@@ -173,23 +169,25 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
         }
     }
 
-    fn execute_op_batch(&mut self, batch: UpdateBatch<Request<A, S>>) -> (SeqNo, BatchReplies<Reply<A, S>>) {
-        let seq_no = batch.sequence_number();
-        let operations = batch.len() as u64;
+    #[inline(always)]
+    fn execute_unordered_op_batch(
+        &mut self,
+        batch: UnorderedBatch<Request<A, S>>,
+    ) -> BatchReplies<Reply<A, S>> {
+        sc_execute_unordered_op_batch(&mut self.thread_pool, &self.application, &self.state, batch)
+    }
 
-        let start = Instant::now();
-
-        let reply_batch = scalable_execution(
+    #[inline(always)]
+    fn execute_op_batch(
+        &mut self,
+        batch: UpdateBatch<Request<A, S>>,
+    ) -> (SeqNo, BatchReplies<Reply<A, S>>) {
+        sc_execute_op_batch(
             &mut self.thread_pool,
             &self.application,
             &mut self.state,
             batch,
-        );
-
-        metric_duration(EXECUTION_TIME_TAKEN_ID, start.elapsed());
-        metric_increment(OPERATIONS_EXECUTED_PER_SECOND_ID, Some(operations));
-
-        (seq_no, reply_batch)
+        )
     }
 
     ///Clones the current state and delivers it to the application
@@ -203,9 +201,9 @@ impl<S, A, NT> ScalableMonolithicExecutor<S, A, NT>
     }
 
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
-        where
-            NT: ReplyNode<SMRReply<A::AppData>> + 'static,
-            T: ExecutorReplier + 'static,
+    where
+        NT: ReplyNode<SMRReply<A::AppData>> + 'static,
+        T: ExecutorReplier + 'static,
     {
         let send_node = self.send_node.clone();
 
