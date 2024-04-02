@@ -21,7 +21,7 @@ use atlas_smr_application::state::monolithic_state::{
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
-use log::info;
+use tracing::info;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;

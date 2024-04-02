@@ -1,6 +1,7 @@
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::instrument;
 
 use crate::ExecutorReplier;
 use atlas_common::channel;
@@ -177,6 +178,7 @@ where
         }
     }
 
+    #[instrument(skip_all, fields(request_count = batch.len()))]
     fn execute_op_batch(
         &mut self,
         batch: UpdateBatch<Request<A, S>>,
@@ -186,6 +188,7 @@ where
 
     /// Clones the current state and delivers it to the application
     /// Takes a sequence number, which corresponds to the last executed consensus instance before we performed the checkpoint
+    #[instrument(skip_all, fields(checkpoint_seq = seq.into_u32()))]
     fn deliver_checkpoint_state(&mut self, seq: SeqNo) {
         let current_state = self
             .state
@@ -223,6 +226,7 @@ where
             .expect("Failed to send checkpoint");
     }
 
+    #[instrument(skip_all, fields(seq_no = seq.map(SeqNo::into_u32), requests = batch.len()))]
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,

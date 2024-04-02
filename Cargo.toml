@@ -10,7 +10,7 @@ edition = "2021"
 getset = "0"
 anyhow = "1.0"
 thiserror = "1.0"
-log = "0.4.19"
+tracing = "*"
 atlas-communication = { path = "../Atlas-Communication" }
 atlas-core = { path = "../Atlas-Core" }
 atlas-smr-application = { path = "../Atlas-SMR-Application" }

@@ -21,7 +21,7 @@ use atlas_smr_application::state::monolithic_state::{
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
-use log::info;
+use tracing::{info, instrument};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::time::Instant;
@@ -162,6 +162,7 @@ where
         }
     }
 
+    #[instrument(skip_all, fields(request_count = batch.len()))]
     fn execute_op_batch(
         &mut self,
         batch: UpdateBatch<Request<A, S>>,
@@ -171,6 +172,7 @@ where
 
     ///Clones the current state and delivers it to the application
     /// Takes a sequence number, which corresponds to the last executed consensus instance before we performed the checkpoint
+    #[instrument(skip_all, fields(checkpoint_seq = seq.into_u32()))]
     fn deliver_checkpoint_state(&self, seq: SeqNo) {
         let cloned_state = self.state.clone();
 
@@ -179,6 +181,7 @@ where
             .expect("Failed to send checkpoint");
     }
 
+    #[instrument(skip_all, fields(seq_no = seq.map(SeqNo::into_u32), requests = batch.len()))]
     fn execution_finished<T>(&self, seq: Option<SeqNo>, batch: BatchReplies<Reply<A, S>>)
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,

@@ -8,6 +8,7 @@ use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
 use std::time::Instant;
+use tracing::instrument;
 
 pub mod divisible_state_exec;
 pub mod monolithic_executor;
@@ -21,6 +22,7 @@ trait UnorderedExecutor<A, S> {
         A: Application<S>;
 }
 
+#[instrument(skip_all, fields(request_count = batch.len()))]
 fn st_execute_op_batch<A, S>(
     application: &A,
     state: &mut S,
@@ -42,6 +44,7 @@ where
     (seq_no, reply_batch)
 }
 
+#[instrument(skip_all, fields(request_count = batch.len()))]
 fn st_execute_unordered_op_batch<A, S>(
     application: &A,
     state: &S,
