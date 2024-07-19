@@ -1,13 +1,16 @@
 #![feature(specialization)]
 
-use crate::metric::REPLIES_SENT_TIME_ID;
+use crate::metric::{REPLIES_SENT_TIME_ID, REPLYING_TO_REQUEST};
 use crate::scalable::{CRUDState, ScalableApp};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::SeqNo;
 use atlas_common::threadpool;
-use atlas_core::messages::ReplyMessage;
-use atlas_metrics::metrics::metric_duration;
+use atlas_core::messages::{
+    create_rq_correlation_id_from_info, create_rq_correlation_id_from_parts, ReplyMessage,
+};
+use atlas_core::metric::{RQ_CLIENT_TRACK_GLOBAL_ID, RQ_CLIENT_TRACKING_ID};
+use atlas_metrics::metrics::{metric_correlation_id_ended, metric_correlation_time_end, metric_duration};
 use atlas_smr_application::app::{Application, BatchReplies, Request};
 use atlas_smr_application::serialize::ApplicationData;
 use atlas_smr_application::state;
@@ -288,6 +291,17 @@ impl ExecutorReplier for ReplicaReplier {
 
             for update_reply in batch {
                 let (peer_id, session_id, operation_id, payload) = update_reply.into_inner();
+
+                metric_correlation_id_ended(
+                    RQ_CLIENT_TRACKING_ID,
+                    create_rq_correlation_id_from_parts(peer_id, session_id, operation_id),
+                    REPLYING_TO_REQUEST.clone(),
+                );
+                
+                metric_correlation_time_end(
+                    RQ_CLIENT_TRACK_GLOBAL_ID,
+                    create_rq_correlation_id_from_parts(peer_id, session_id, operation_id),
+                );
 
                 // NOTE: the technique used here to peek the next reply is a
                 // hack... when we port this fix over to the production

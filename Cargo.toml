@@ -21,4 +21,5 @@ atlas-common = { path = "../Atlas-Common" }
 # immutable reference to the state across threads without having to use Arc or 'static
 # Reference lifetimes
 rayon = "1.9.0"
-itertools = "0.12.1"
+itertools = "*"
+lazy_static = "*"

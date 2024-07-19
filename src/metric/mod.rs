@@ -1,5 +1,7 @@
 use atlas_metrics::metrics::MetricKind;
 use atlas_metrics::{MetricLevel, MetricRegistry};
+use lazy_static::lazy_static;
+use std::sync::Arc;
 
 /// SMR Execution will get 8XX
 pub const EXECUTION_LATENCY_TIME: &str = "EXECUTION_LATENCY";
@@ -75,3 +77,7 @@ pub fn metrics() -> Vec<MetricRegistry> {
             .into(),
     ]
 }
+
+lazy_static! (
+    pub static ref REPLYING_TO_REQUEST: Arc<str> = Arc::from("REPLY_TO_REQUEST");
+);
