@@ -78,6 +78,6 @@ pub fn metrics() -> Vec<MetricRegistry> {
     ]
 }
 
-lazy_static! (
+lazy_static! {
     pub static ref REPLYING_TO_REQUEST: Arc<str> = Arc::from("REPLY_TO_REQUEST");
-);
+}

@@ -9,8 +9,10 @@ use atlas_common::threadpool;
 use atlas_core::messages::{
     create_rq_correlation_id_from_info, create_rq_correlation_id_from_parts, ReplyMessage,
 };
-use atlas_core::metric::{RQ_CLIENT_TRACK_GLOBAL_ID, RQ_CLIENT_TRACKING_ID};
-use atlas_metrics::metrics::{metric_correlation_id_ended, metric_correlation_time_end, metric_duration};
+use atlas_core::metric::{RQ_CLIENT_TRACKING_ID, RQ_CLIENT_TRACK_GLOBAL_ID};
+use atlas_metrics::metrics::{
+    metric_correlation_id_ended, metric_correlation_time_end, metric_duration,
+};
 use atlas_smr_application::app::{Application, BatchReplies, Request};
 use atlas_smr_application::serialize::ApplicationData;
 use atlas_smr_application::state;
@@ -297,7 +299,7 @@ impl ExecutorReplier for ReplicaReplier {
                     create_rq_correlation_id_from_parts(peer_id, session_id, operation_id),
                     REPLYING_TO_REQUEST.clone(),
                 );
-                
+
                 metric_correlation_time_end(
                     RQ_CLIENT_TRACK_GLOBAL_ID,
                     create_rq_correlation_id_from_parts(peer_id, session_id, operation_id),
