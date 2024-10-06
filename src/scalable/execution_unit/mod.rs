@@ -5,7 +5,7 @@ use atlas_common::collections::HashMap;
 use atlas_common::ordering::SeqNo;
 use getset::{CopyGetters, Getters};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet};
 
 /// A data structure that represents a single execution unit
 /// Which can be speculatively parallelized.

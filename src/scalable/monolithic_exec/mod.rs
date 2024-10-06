@@ -1,17 +1,15 @@
 use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
-    UNORDERED_EXECUTION_TIME_TAKEN_ID, UNORDERED_OPS_PER_SECOND_ID,
+    EXECUTION_LATENCY_TIME_ID,
 };
 use crate::scalable::{
-    sc_execute_op_batch, sc_execute_unordered_op_batch, scalable_execution,
-    scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
+    sc_execute_op_batch, sc_execute_unordered_op_batch, CRUDState, ScalableApp,
 };
 use crate::ExecutorReplier;
 use atlas_common::channel;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
-use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_metrics::metrics::{metric_duration, metric_increment};
+use atlas_common::ordering::{SeqNo};
+use atlas_metrics::metrics::{metric_duration};
 use atlas_smr_application::app::{
     AppData, Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -23,7 +21,7 @@ use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
-use std::time::Instant;
+
 use tracing::info;
 
 const EXECUTING_BUFFER: usize = 16384;
@@ -57,7 +55,7 @@ where
         ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     ) {
         let (tx, rx) =
-            channel::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Mon Exec Work Channel"));
+            channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Mon Exec Work Channel"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -82,10 +80,10 @@ where
         };
 
         let (state_tx, state_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon Install State Channel"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon Install State Channel"));
 
         let (checkpoint_tx, checkpoint_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon App State Message"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon App State Message"));
 
         let mut executor = ScalableMonolithicExecutor {
             application: service,

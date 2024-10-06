@@ -1,13 +1,12 @@
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
-use std::time::Instant;
 
 use atlas_common::channel;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
-use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_metrics::metrics::{metric_duration, metric_increment};
+use atlas_common::ordering::{ SeqNo};
+use atlas_metrics::metrics::{metric_duration};
 use atlas_smr_application::app::{
     AppData, Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -19,12 +18,10 @@ use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 
 use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
-    UNORDERED_EXECUTION_TIME_TAKEN_ID, UNORDERED_OPS_PER_SECOND_ID,
+    EXECUTION_LATENCY_TIME_ID,
 };
 use crate::scalable::{
-    sc_execute_op_batch, sc_execute_unordered_op_batch, scalable_execution,
-    scalable_unordered_execution, CRUDState, ScalableApp, THREAD_POOL_THREADS,
+    sc_execute_op_batch, sc_execute_unordered_op_batch, CRUDState, ScalableApp, THREAD_POOL_THREADS,
 };
 use crate::ExecutorReplier;
 
@@ -62,7 +59,7 @@ where
         ExecutorHandle<Request<A, S>>,
         ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     ) {
-        let (tx, rx) = channel::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Work Handle"));
+        let (tx, rx) = channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Work Handle"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -87,10 +84,10 @@ where
         };
 
         let (state_tx, state_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("Install State Work Handle"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Install State Work Handle"));
 
         let (checkpoint_tx, checkpoint_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("App State Checkpoint Work Handle"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("App State Checkpoint Work Handle"));
 
         let descriptor = state.get_descriptor().clone();
 

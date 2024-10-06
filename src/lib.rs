@@ -2,12 +2,12 @@
 
 use crate::metric::{REPLIES_SENT_TIME_ID, REPLYING_TO_REQUEST};
 use crate::scalable::{CRUDState, ScalableApp};
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::SeqNo;
 use atlas_common::threadpool;
 use atlas_core::messages::{
-    create_rq_correlation_id_from_info, create_rq_correlation_id_from_parts, ReplyMessage,
+     create_rq_correlation_id_from_parts, ReplyMessage,
 };
 use atlas_core::metric::{RQ_CLIENT_TRACKING_ID, RQ_CLIENT_TRACK_GLOBAL_ID};
 use atlas_metrics::metrics::{
@@ -230,9 +230,6 @@ where
         )
     }
 }
-
-const EXECUTING_BUFFER: usize = 16384;
-//const REPLY_CONCURRENCY: usize = 4;
 
 pub trait ExecutorReplier: Send {
     fn execution_finished<D, NT>(node: Arc<NT>, seq: Option<SeqNo>, batch: BatchReplies<D::Reply>)

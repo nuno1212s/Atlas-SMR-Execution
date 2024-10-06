@@ -1,15 +1,14 @@
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
-use std::time::Instant;
 use tracing::instrument;
 
 use crate::ExecutorReplier;
 use atlas_common::channel;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
-use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_metrics::metrics::{metric_duration, metric_increment};
+use atlas_common::ordering::{SeqNo};
+use atlas_metrics::metrics::{metric_duration};
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -22,10 +21,9 @@ use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 
 use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID, EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID,
-    UNORDERED_OPS_PER_SECOND_ID,
+    EXECUTION_LATENCY_TIME_ID,
 };
-use crate::scalable::{sc_execute_unordered_op_batch, scalable_unordered_execution};
+use crate::scalable::{sc_execute_unordered_op_batch};
 use crate::single_threaded::{
     st_execute_op_batch, st_execute_unordered_op_batch, UnorderedExecutor,
 };
@@ -64,7 +62,7 @@ where
         ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     ) {
         let (tx, rx) =
-            channel::new_bounded_sync(EXECUTING_BUFFER, Some("Divisible State ST Exec Work"));
+            channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Divisible State ST Exec Work"));
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -89,10 +87,10 @@ where
         };
 
         let (state_tx, state_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("Divisible state ST InsState"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Divisible state ST InsState"));
 
         let (checkpoint_tx, checkpoint_rx) =
-            channel::new_bounded_sync(STATE_BUFFER, Some("Divisible State ST AppState"));
+            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Divisible State ST AppState"));
 
         let descriptor = state.get_descriptor().clone();
 

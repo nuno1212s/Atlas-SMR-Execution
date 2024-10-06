@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use itertools::Itertools;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 
@@ -94,7 +93,7 @@ where
 
     let mut replies = BatchReplies::with_capacity(batch.len());
 
-    let (tx, rx) = channel::new_bounded_sync(batch.len(), None::<String>);
+    let (tx, rx) = channel::sync::new_bounded_sync(batch.len(), None::<String>);
 
     let updates = batch
         .into_inner()
