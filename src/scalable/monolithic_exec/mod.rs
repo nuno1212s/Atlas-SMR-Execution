@@ -194,7 +194,7 @@ where
         let cloned_state = self.state.clone();
 
         self.checkpoint_tx
-            .send_return(AppStateMessage::new(seq, cloned_state))
+            .send(AppStateMessage::new(seq, cloned_state))
             .expect("Failed to send checkpoint");
     }
 

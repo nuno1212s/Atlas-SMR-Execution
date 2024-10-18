@@ -219,7 +219,7 @@ where
             .compare_descriptors(&current_state);
 
         self.checkpoint_tx
-            .send_return(AppStateMessage::new(
+            .send(AppStateMessage::new(
                 seq,
                 AppState::StateDescriptor(current_state),
             ))
@@ -232,7 +232,7 @@ where
                 .expect("Failed to get necessary parts");
 
             self.checkpoint_tx
-                .send_return(AppStateMessage::new(
+                .send(AppStateMessage::new(
                     seq,
                     AppState::StatePart(MaybeVec::Mult(parts)),
                 ))
@@ -240,7 +240,7 @@ where
         }
 
         self.checkpoint_tx
-            .send_return(AppStateMessage::new(seq, AppState::Done))
+            .send(AppStateMessage::new(seq, AppState::Done))
             .expect("Failed to send checkpoint");
     }
 

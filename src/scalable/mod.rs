@@ -133,7 +133,7 @@ where
                         let reply = application
                             .speculatively_execute(&mut exec_unit, request.operation().clone());
 
-                        tx.send_return((
+                        tx.send((
                             *pos,
                             exec_unit.complete(),
                             UpdateReply::init(
