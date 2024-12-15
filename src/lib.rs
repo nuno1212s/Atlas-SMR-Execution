@@ -278,11 +278,11 @@ impl ExecutorReplier for ReplicaReplier {
         } else {
             RequestType::Unordered
         };
-
+        
         threadpool::execute(move || {
             let mut batch = batch.into_inner();
 
-            batch.sort_unstable_by_key(|update_reply| update_reply.to());
+            //batch.sort_unstable_by_key(|update_reply| update_reply.to());
 
             // keep track of the last message and node id
             // we iterated over

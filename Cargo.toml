@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 getset = "0"
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2"
 tracing = "*"
 atlas-communication = { path = "../Atlas-Communication" }
 atlas-core = { path = "../Atlas-Core" }
