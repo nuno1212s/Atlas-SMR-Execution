@@ -212,7 +212,7 @@ where
 impl<S, A, NT> UnorderedExecutor<A, S> for MonolithicExecutor<S, A, NT>
 where
     S: MonolithicState + Sync + 'static,
-    A: Application<S> + 'static + Send,
+    A: Application<S> + Send + 'static,
     NT: 'static,
 {
     fn execute_unordered(
