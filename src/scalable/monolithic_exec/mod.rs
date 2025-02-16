@@ -1,15 +1,11 @@
-use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID,
-};
-use crate::scalable::{
-    sc_execute_op_batch, sc_execute_unordered_op_batch, CRUDState, ScalableApp,
-};
+use crate::metric::EXECUTION_LATENCY_TIME_ID;
+use crate::scalable::{sc_execute_op_batch, sc_execute_unordered_op_batch, CRUDState, ScalableApp};
 use crate::ExecutorReplier;
 use atlas_common::channel;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
-use atlas_common::ordering::{SeqNo};
-use atlas_metrics::metrics::{metric_duration};
+use atlas_common::ordering::SeqNo;
+use atlas_metrics::metrics::metric_duration;
 use atlas_smr_application::app::{
     AppData, Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -54,8 +50,10 @@ where
         ExecutorHandle<Request<A, S>>,
         ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
     ) {
-        let (tx, rx) =
-            channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Mon Exec Work Channel"));
+        let (tx, rx) = channel::sync::new_bounded_sync(
+            EXECUTING_BUFFER,
+            Some("Scalable Mon Exec Work Channel"),
+        );
 
         (ExecutorHandle::new(tx), rx)
     }
@@ -79,8 +77,10 @@ where
             (<A as Application<S>>::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) =
-            channel::sync::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon Install State Channel"));
+        let (state_tx, state_rx) = channel::sync::new_bounded_sync(
+            STATE_BUFFER,
+            Some("Scalable Mon Install State Channel"),
+        );
 
         let (checkpoint_tx, checkpoint_rx) =
             channel::sync::new_bounded_sync(STATE_BUFFER, Some("Scalable Mon App State Message"));

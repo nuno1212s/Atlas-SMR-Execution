@@ -6,9 +6,7 @@ use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::ordering::SeqNo;
 use atlas_common::threadpool;
-use atlas_core::messages::{
-     create_rq_correlation_id_from_parts, ReplyMessage,
-};
+use atlas_core::messages::{create_rq_correlation_id_from_parts, ReplyMessage};
 use atlas_core::metric::{RQ_CLIENT_TRACKING_ID, RQ_CLIENT_TRACK_GLOBAL_ID};
 use atlas_metrics::metrics::{
     metric_correlation_id_ended, metric_correlation_time_end, metric_duration,
@@ -278,7 +276,7 @@ impl ExecutorReplier for ReplicaReplier {
         } else {
             RequestType::Unordered
         };
-        
+
         threadpool::execute(move || {
             let mut batch = batch.into_inner();
 

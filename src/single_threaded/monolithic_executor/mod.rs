@@ -1,7 +1,5 @@
-use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID,
-};
-use crate::scalable::{sc_execute_unordered_op_batch};
+use crate::metric::EXECUTION_LATENCY_TIME_ID;
+use crate::scalable::sc_execute_unordered_op_batch;
 use crate::single_threaded::{
     st_execute_op_batch, st_execute_unordered_op_batch, UnorderedExecutor,
 };
@@ -9,8 +7,8 @@ use crate::ExecutorReplier;
 use atlas_common::channel;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
-use atlas_common::ordering::{SeqNo};
-use atlas_metrics::metrics::{metric_duration};
+use atlas_common::ordering::SeqNo;
+use atlas_metrics::metrics::metric_duration;
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -81,8 +79,10 @@ where
             (A::initial_state()?, vec![])
         };
 
-        let (state_tx, state_rx) =
-            channel::sync::new_bounded_sync(STATE_BUFFER, Some("ST Monolithic Executor Work InstState"));
+        let (state_tx, state_rx) = channel::sync::new_bounded_sync(
+            STATE_BUFFER,
+            Some("ST Monolithic Executor Work InstState"),
+        );
 
         let (checkpoint_tx, checkpoint_rx) =
             channel::sync::new_bounded_sync(STATE_BUFFER, Some("ST Monolithic Executor AppState"));

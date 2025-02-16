@@ -7,8 +7,8 @@ use atlas_common::channel;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
 use atlas_common::maybe_vec::MaybeVec;
-use atlas_common::ordering::{SeqNo};
-use atlas_metrics::metrics::{metric_duration};
+use atlas_common::ordering::SeqNo;
+use atlas_metrics::metrics::metric_duration;
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch,
 };
@@ -20,10 +20,8 @@ use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::ReplyNode;
 use atlas_smr_core::SMRReply;
 
-use crate::metric::{
-    EXECUTION_LATENCY_TIME_ID,
-};
-use crate::scalable::{sc_execute_unordered_op_batch};
+use crate::metric::EXECUTION_LATENCY_TIME_ID;
+use crate::scalable::sc_execute_unordered_op_batch;
 use crate::single_threaded::{
     st_execute_op_batch, st_execute_unordered_op_batch, UnorderedExecutor,
 };
