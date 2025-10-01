@@ -8,10 +8,7 @@ edition = "2021"
 
 [dependencies]
 getset = "0"
-anyhow = "1.0"
-thiserror = "2"
 tracing = "*"
-atlas-communication = { path = "../Atlas-Communication" }
 atlas-core = { path = "../Atlas-Core" }
 atlas-smr-application = { path = "../Atlas-SMR-Application" }
 atlas-smr-core = { path = "../Atlas-SMR-Core" }
@@ -21,5 +18,4 @@ atlas-common = { path = "../Atlas-Common" }
 # immutable reference to the state across threads without having to use Arc or 'static
 # Reference lifetimes
 rayon = "1.9.0"
-itertools = "*"
 lazy_static = "*"

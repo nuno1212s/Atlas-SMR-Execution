@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(specialization)]
 
 use crate::metric::{REPLIES_SENT_TIME_ID, REPLYING_TO_REQUEST};
@@ -13,11 +14,9 @@ use atlas_metrics::metrics::{
 };
 use atlas_smr_application::app::{Application, BatchReplies, Request};
 use atlas_smr_application::serialize::ApplicationData;
-use atlas_smr_application::state;
 use atlas_smr_application::state::divisible_state::DivisibleState;
-use atlas_smr_application::state::monolithic_state::{
-    AppStateMessage, InstallStateMessage, MonolithicState,
-};
+use atlas_smr_application::state::monolithic_state::MonolithicState;
+use atlas_smr_application::state::{divisible_state, monolithic_state};
 use atlas_smr_application::{ExecutionRequest, ExecutorHandle};
 use atlas_smr_core::exec::{ReplyNode, RequestType};
 use atlas_smr_core::SMRReply;
@@ -37,6 +36,16 @@ pub struct SingleThreadedDivExecutor;
 
 pub struct MultiThreadedDivExecutor;
 
+pub type ExecutorHandles<A, S> = (
+    ExecutorHandle<Request<A, S>>,
+    ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
+);
+
+pub type DVStateInstallHandle<S> = (
+    ChannelSyncTx<divisible_state::InstallStateMessage<S>>,
+    ChannelSyncRx<divisible_state::AppStateMessage<S>>,
+);
+
 /// Trait defining the necessary methods for a divisible state executor
 /// (In reality since all communication is done via channels, this ends up just defining the
 /// initialisation method)
@@ -47,10 +56,7 @@ where
     NT: 'static,
 {
     /// Initialize a handle and a channel to receive requests
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    );
+    fn init_handle() -> ExecutorHandles<A, S>;
 
     /// Initialization method for the executor
     /// Should return a channel for the state messages to be sent to the executor
@@ -60,14 +66,15 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
-        ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
-    )>
+    ) -> Result<DVStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static;
 }
 
+pub type MonStateInstallHandle<S> = (
+    ChannelSyncTx<monolithic_state::InstallStateMessage<S>>,
+    ChannelSyncRx<monolithic_state::AppStateMessage<S>>,
+);
 /// Trait defining the necessary methods for a monolithic state executor
 /// (In reality since all communication is done via channels, this ends up just defining the
 /// initialisation method)
@@ -78,10 +85,7 @@ where
     NT: 'static,
 {
     /// Initialize a handle and a channel to receive requests
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    );
+    fn init_handle() -> ExecutorHandles<A, S>;
 
     /// Initialization method for the executor
     /// Should return a channel for the state messages to be sent to the executor
@@ -91,10 +95,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<state::monolithic_state::InstallStateMessage<S>>,
-        ChannelSyncRx<state::monolithic_state::AppStateMessage<S>>,
-    )>
+    ) -> Result<MonStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static;
 }
@@ -105,10 +106,7 @@ where
     S: DivisibleState + Send + 'static,
     NT: 'static,
 {
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    fn init_handle() -> ExecutorHandles<A, S> {
         single_threaded::divisible_state_exec::DivisibleStateExecutor::<S, A, NT>::init_handle()
     }
 
@@ -117,10 +115,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
-        ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
-    )>
+    ) -> Result<DVStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
@@ -136,10 +131,7 @@ where
     S: DivisibleState + CRUDState + Send + Sync + 'static,
     NT: 'static,
 {
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    fn init_handle() -> ExecutorHandles<A, S> {
         scalable::divisible_state_exec::ScalableDivisibleStateExecutor::<S, A, NT>::init_handle()
     }
 
@@ -148,10 +140,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<state::divisible_state::InstallStateMessage<S>>,
-        ChannelSyncRx<state::divisible_state::AppStateMessage<S>>,
-    )>
+    ) -> Result<DVStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
@@ -167,10 +156,7 @@ where
     S: MonolithicState + 'static,
     NT: 'static,
 {
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    fn init_handle() -> ExecutorHandles<A, S> {
         single_threaded::monolithic_executor::MonolithicExecutor::<S, A, NT>::init_handle()
     }
 
@@ -179,10 +165,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<InstallStateMessage<S>>,
-        ChannelSyncRx<AppStateMessage<S>>,
-    )>
+    ) -> Result<MonStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
@@ -201,10 +184,7 @@ where
     S: MonolithicState + CRUDState + Send + Sync + 'static,
     NT: 'static,
 {
-    fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    fn init_handle() -> ExecutorHandles<A, S> {
         scalable::monolithic_exec::ScalableMonolithicExecutor::<S, A, NT>::init_handle()
     }
 
@@ -213,10 +193,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<InstallStateMessage<S>>,
-        ChannelSyncRx<AppStateMessage<S>>,
-    )>
+    ) -> Result<MonStateInstallHandle<S>>
     where
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
@@ -264,7 +241,7 @@ impl ExecutorReplier for ReplicaReplier {
         D: ApplicationData + 'static,
         NT: ReplyNode<SMRReply<D>> + 'static,
     {
-        if batch.len() == 0 {
+        if batch.is_empty() {
             //Ignore empty batches.
             return;
         }
@@ -278,7 +255,7 @@ impl ExecutorReplier for ReplicaReplier {
         };
 
         threadpool::execute(move || {
-            let mut batch = batch.into_inner();
+            let batch = batch.into_inner();
 
             //batch.sort_unstable_by_key(|update_reply| update_reply.to());
 

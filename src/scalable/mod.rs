@@ -12,7 +12,6 @@ use atlas_metrics::metrics::{metric_duration, metric_increment};
 use atlas_smr_application::app::{
     Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
 };
-
 use crate::metric::{
     EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_EXECUTION_TIME_TAKEN_ID,
     UNORDERED_OPS_PER_SECOND_ID,

@@ -3,7 +3,7 @@ use crate::scalable::sc_execute_unordered_op_batch;
 use crate::single_threaded::{
     st_execute_op_batch, st_execute_unordered_op_batch, UnorderedExecutor,
 };
-use crate::ExecutorReplier;
+use crate::{ExecutorHandles, ExecutorReplier, MonStateInstallHandle};
 use atlas_common::channel;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
@@ -48,10 +48,7 @@ where
     A: Application<S> + 'static + Send,
     NT: 'static,
 {
-    pub fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    pub fn init_handle() -> ExecutorHandles<A, S> {
         let (tx, rx) = channel::sync::new_bounded_sync(
             EXECUTING_BUFFER,
             Some("ST Monolithic Executor Work Channel"),
@@ -65,10 +62,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<InstallStateMessage<S>>,
-        ChannelSyncRx<AppStateMessage<S>>,
-    )>
+    ) -> Result<MonStateInstallHandle<S>>
     where
         T: ExecutorReplier + 'static,
         NT: ReplyNode<SMRReply<A::AppData>>,

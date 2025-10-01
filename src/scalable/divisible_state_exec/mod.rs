@@ -21,7 +21,7 @@ use crate::metric::EXECUTION_LATENCY_TIME_ID;
 use crate::scalable::{
     sc_execute_op_batch, sc_execute_unordered_op_batch, CRUDState, ScalableApp, THREAD_POOL_THREADS,
 };
-use crate::ExecutorReplier;
+use crate::{DVStateInstallHandle, ExecutorHandles, ExecutorReplier};
 
 const EXECUTING_BUFFER: usize = 16384;
 const STATE_BUFFER: usize = 128;
@@ -53,10 +53,7 @@ where
     S: DivisibleState + CRUDState + 'static + Sync,
     A: ScalableApp<S> + 'static + Send,
 {
-    pub fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    pub fn init_handle() -> ExecutorHandles<A, S> {
         let (tx, rx) =
             channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Scalable Work Handle"));
 
@@ -68,11 +65,9 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<InstallStateMessage<S>>,
-        ChannelSyncRx<AppStateMessage<S>>,
-    )>
+    ) -> Result<DVStateInstallHandle<S>>
     where
+
         T: ExecutorReplier + 'static,
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {
@@ -249,19 +244,6 @@ where
         T: ExecutorReplier + 'static,
     {
         let send_node = self.send_node.clone();
-
-        /*{
-            if let Some(seq) = seq {
-                if let Some(observer_handle) = &self.observer_handle {
-                    //Do not notify of unordered events
-                    let observe_event = MessageType::Event(ObserveEventKind::Executed(seq));
-
-                    if let Err(err) = observer_handle.tx().send(observe_event) {
-                        error!("{:?}", err);
-                    }
-                }
-            }
-        }*/
 
         T::execution_finished::<AppData<A, S>, NT>(send_node, seq, batch);
     }

@@ -2,7 +2,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use tracing::instrument;
 
-use crate::ExecutorReplier;
+use crate::{DVStateInstallHandle, ExecutorHandles, ExecutorReplier};
 use atlas_common::channel;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
@@ -55,10 +55,7 @@ where
     S: DivisibleState + 'static + Send,
     A: Application<S> + 'static + Send,
 {
-    pub fn init_handle() -> (
-        ExecutorHandle<Request<A, S>>,
-        ChannelSyncRx<ExecutionRequest<Request<A, S>>>,
-    ) {
+    pub fn init_handle() -> ExecutorHandles<A, S> {
         let (tx, rx) =
             channel::sync::new_bounded_sync(EXECUTING_BUFFER, Some("Divisible State ST Exec Work"));
 
@@ -70,10 +67,7 @@ where
         initial_state: Option<(S, Vec<Request<A, S>>)>,
         service: A,
         send_node: Arc<NT>,
-    ) -> Result<(
-        ChannelSyncTx<InstallStateMessage<S>>,
-        ChannelSyncRx<AppStateMessage<S>>,
-    )>
+    ) -> Result<DVStateInstallHandle<S>>
     where
         T: ExecutorReplier + 'static,
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
