@@ -67,7 +67,6 @@ where
         send_node: Arc<NT>,
     ) -> Result<DVStateInstallHandle<S>>
     where
-
         T: ExecutorReplier + 'static,
         NT: ReplyNode<SMRReply<A::AppData>> + 'static,
     {

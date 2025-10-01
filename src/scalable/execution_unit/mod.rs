@@ -203,8 +203,7 @@ fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Col
 where
     S: CRUDState,
 {
-    let mut accessed: HashMap<String, InnerCollisions> =
-        Default::default();
+    let mut accessed: HashMap<String, InnerCollisions> = Default::default();
 
     let mut collisions = BTreeSet::new();
 

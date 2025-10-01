@@ -6,18 +6,18 @@ use std::time::Instant;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 
-use atlas_common::channel;
-use atlas_common::ordering::{Orderable, SeqNo};
-use atlas_metrics::metrics::{metric_duration, metric_increment};
-use atlas_smr_application::app::{
-    Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
-};
 use crate::metric::{
     EXECUTION_TIME_TAKEN_ID, OPERATIONS_EXECUTED_PER_SECOND_ID, UNORDERED_EXECUTION_TIME_TAKEN_ID,
     UNORDERED_OPS_PER_SECOND_ID,
 };
 use crate::scalable::execution_unit::{
     progress_collision_state, CollisionState, ExecutionResult, ExecutionUnit,
+};
+use atlas_common::channel;
+use atlas_common::ordering::{Orderable, SeqNo};
+use atlas_metrics::metrics::{metric_duration, metric_increment};
+use atlas_smr_application::app::{
+    Application, BatchReplies, Reply, Request, UnorderedBatch, UpdateBatch, UpdateReply,
 };
 
 pub mod divisible_state_exec;
