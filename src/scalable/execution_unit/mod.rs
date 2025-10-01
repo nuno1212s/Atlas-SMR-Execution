@@ -120,7 +120,6 @@ impl<'a, S> ExecutionUnit<'a, S>
 where
     S: CRUDState,
 {
-    ///
     pub fn complete(self) -> ExecutionResult {
         ExecutionResult {
             seq_no: self.seq_no,
@@ -196,14 +195,15 @@ pub(super) fn progress_collision_state(state: &mut CollisionState, unit: &Execut
     collided
 }
 
+type InnerCollisions = HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>;
+
 /// Calculate collisions of data accesses within a batch, returns all
 /// of the operations that must be executed sequentially
 fn calculate_collisions<S>(execution_units: Vec<ExecutionUnit<S>>) -> Option<Collisions>
 where
     S: CRUDState,
 {
-    let mut accessed: HashMap<String, HashMap<Vec<u8>, (Vec<AccessType>, Vec<usize>)>> =
-        Default::default();
+    let mut accessed: HashMap<String, InnerCollisions> = Default::default();
 
     let mut collisions = BTreeSet::new();
 
